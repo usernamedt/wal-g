@@ -131,28 +131,22 @@ func (backup *Backup) fetchMeta() (ExtendedMetadataDto, error) {
 }
 
 func checkDbDirectoryForUnwrap(dbDataDirectory string, sentinelDto BackupSentinelDto) error {
-	if !sentinelDto.IsIncremental() {
-		isEmpty, err := isDirectoryEmpty(dbDataDirectory)
-		if err != nil {
-			return err
-		}
-		if !isEmpty {
-			return newNonEmptyDbDataDirectoryError(dbDataDirectory)
-		}
-	} else {
-		tracelog.DebugLogger.Println("DB data directory before increment:")
-		_ = filepath.Walk(dbDataDirectory,
-			func(path string, info os.FileInfo, err error) error {
-				if !info.IsDir() {
-					tracelog.DebugLogger.Println(path)
-				}
-				return nil
-			})
-
-		for fileName, fileDescription := range sentinelDto.Files {
-			if fileDescription.IsSkipped {
-				tracelog.DebugLogger.Printf("Skipped file %v\n", fileName)
+	// just log the dir contents before increment
+	tracelog.DebugLogger.Println("DB data directory before increment:")
+	_ = filepath.Walk(dbDataDirectory,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
+			if !info.IsDir() {
+				tracelog.DebugLogger.Println(path)
+			}
+			return nil
+		})
+
+	for fileName, fileDescription := range sentinelDto.Files {
+		if fileDescription.IsSkipped {
+			tracelog.DebugLogger.Printf("Skipped file %v\n", fileName)
 		}
 	}
 
@@ -188,7 +182,8 @@ func setTablespacePaths(spec TablespaceSpec) error {
 	return nil
 }
 
-// check that directory is empty before unwrap
+// ??? correct naming?
+// set tablespace paths, log directory contents and skipped files before unwrap
 func (backup *Backup) unwrapToEmptyDirectory(
 	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool, createIncrementalFiles bool,
 ) error {

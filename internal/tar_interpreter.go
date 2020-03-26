@@ -44,13 +44,109 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFile(fileReader io.Reader
 			return nil
 		}
 	}
-	fileDescription, haveFileDescription := tarInterpreter.Sentinel.Files[fileInfo.Name]
 
-	// If this file is incremental we use it's base version from incremental path
-	if haveFileDescription && tarInterpreter.Sentinel.IsIncremental() && fileDescription.IsIncremented {
-		err := ApplyFileIncrement(targetPath, fileReader, tarInterpreter.createNewIncrementalFiles)
-		return errors.Wrapf(err, "Interpret: failed to apply increment for '%s'", targetPath)
+	if !tarInterpreter.Sentinel.IsIncremental() {
+		// it is base (last to unpack) backup
+		return handleBaseBackupFile(fileReader, fileInfo, targetPath, tarInterpreter.createNewIncrementalFiles)
 	}
+
+	// it is a delta backup
+	fileDescription, haveFileDescription := tarInterpreter.Sentinel.Files[fileInfo.Name]
+	return handleDeltaBackupFile(fileReader, fileInfo, targetPath, fileDescription, haveFileDescription,
+		tarInterpreter.createNewIncrementalFiles)
+}
+
+// Interpret extracts a tar file to disk and creates needed directories.
+// Returns the first error encountered. Calls fsync after each file
+// is written successfully.
+func (tarInterpreter *FileTarInterpreter) Interpret(fileReader io.Reader, fileInfo *tar.Header) error {
+	tracelog.DebugLogger.Println("Interpreting: ", fileInfo.Name)
+	targetPath := path.Join(tarInterpreter.DBDataDirectory, fileInfo.Name)
+	switch fileInfo.Typeflag {
+	case tar.TypeReg, tar.TypeRegA:
+		return tarInterpreter.unwrapRegularFile(fileReader, fileInfo, targetPath)
+	case tar.TypeDir:
+		err := os.MkdirAll(targetPath, 0755)
+		if err != nil {
+			return errors.Wrapf(err, "Interpret: failed to create all directories in %s", targetPath)
+		}
+		if err = os.Chmod(targetPath, os.FileMode(fileInfo.Mode)); err != nil {
+			return errors.Wrap(err, "Interpret: chmod failed")
+		}
+	case tar.TypeLink:
+		if err := os.Link(fileInfo.Name, targetPath); err != nil {
+			return errors.Wrapf(err, "Interpret: failed to create hardlink %s", targetPath)
+		}
+	case tar.TypeSymlink:
+		if err := os.Symlink(fileInfo.Name, targetPath); err != nil {
+			return errors.Wrapf(err, "Interpret: failed to create symlink %s", targetPath)
+		}
+	}
+	return nil
+}
+
+// get fileinfo of local file on the disk, or error if failed
+func getLocalFileInfo(filename string) (fileInfo os.FileInfo, err error) {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, errors.New("Requested file is directory. Aborting.")
+	}
+	return info, nil
+}
+
+func handleDeltaBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string,
+	fileDescription BackupFileDescription, haveFileDescription, createNewIncrementalFiles bool) error {
+
+	// if local file exists
+	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
+		// if it is a page file, apply increment
+		if isPagedFile(localFileInfo, targetPath) {
+
+			// if current patch is not base version => apply it
+			if haveFileDescription && fileDescription.IsIncremented {
+				err := ApplyFileIncrement(targetPath, fileReader, createNewIncrementalFiles)
+				return errors.Wrapf(err, "Interpret: failed to apply increment for '%s'", targetPath)
+			}
+
+			// else, it is a base version of the page file => merge it
+			err := MergeBaseToDelta(targetPath, fileReader, createNewIncrementalFiles)
+			return errors.Wrapf(err, "Interpret: failed to merge initial file for '%s'", targetPath)
+		}
+
+		// skip the older regular file
+		return nil
+	}
+
+	if haveFileDescription && fileDescription.IsIncremented {
+		err := CreateFileFromIncrement(fileInfo.Name, targetPath, fileReader)
+		return errors.Wrapf(err, "Interpret: failed to create file from increment for '%s'", targetPath)
+	}
+
+	// write non-delta file to disk
+	return writeFileToDisk(fileReader, fileInfo, targetPath)
+}
+
+func handleBaseBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, createNewIncrementalFiles bool) error {
+	// check if local file exists, if not => just write it
+	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
+		// check if local file is page file or regular file, if page file => merge
+		if isPagedFile(localFileInfo, targetPath) {
+			err := MergeBaseToDelta(targetPath, fileReader, createNewIncrementalFiles)
+			return errors.Wrapf(err, "Interpret: failed to merge initial file for '%s'", targetPath)
+		}
+
+		// it is a regular file, just skip it
+		return nil
+	}
+
+	// write base file to disk
+	return writeFileToDisk(fileReader, fileInfo, targetPath)
+}
+
+func writeFileToDisk(fileReader io.Reader, fileInfo *tar.Header, targetPath string) error {
 	err := PrepareDirs(fileInfo.Name, targetPath)
 	if err != nil {
 		return errors.Wrap(err, "Interpret: failed to create all directories")
@@ -81,35 +177,6 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFile(fileReader io.Reader
 
 	err = file.Sync()
 	return errors.Wrap(err, "Interpret: fsync failed")
-}
-
-// Interpret extracts a tar file to disk and creates needed directories.
-// Returns the first error encountered. Calls fsync after each file
-// is written successfully.
-func (tarInterpreter *FileTarInterpreter) Interpret(fileReader io.Reader, fileInfo *tar.Header) error {
-	tracelog.DebugLogger.Println("Interpreting: ", fileInfo.Name)
-	targetPath := path.Join(tarInterpreter.DBDataDirectory, fileInfo.Name)
-	switch fileInfo.Typeflag {
-	case tar.TypeReg, tar.TypeRegA:
-		return tarInterpreter.unwrapRegularFile(fileReader, fileInfo, targetPath)
-	case tar.TypeDir:
-		err := os.MkdirAll(targetPath, 0755)
-		if err != nil {
-			return errors.Wrapf(err, "Interpret: failed to create all directories in %s", targetPath)
-		}
-		if err = os.Chmod(targetPath, os.FileMode(fileInfo.Mode)); err != nil {
-			return errors.Wrap(err, "Interpret: chmod failed")
-		}
-	case tar.TypeLink:
-		if err := os.Link(fileInfo.Name, targetPath); err != nil {
-			return errors.Wrapf(err, "Interpret: failed to create hardlink %s", targetPath)
-		}
-	case tar.TypeSymlink:
-		if err := os.Symlink(fileInfo.Name, targetPath); err != nil {
-			return errors.Wrapf(err, "Interpret: failed to create symlink %s", targetPath)
-		}
-	}
-	return nil
 }
 
 // PrepareDirs makes sure all dirs exist

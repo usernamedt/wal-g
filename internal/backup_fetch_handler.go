@@ -74,9 +74,18 @@ func GetPgFetcher(dbDataDirectory, fileMask, restoreSpecPath string) func(folder
 		if restoreSpecPath != "" {
 			spec = &TablespaceSpec{}
 			err := readRestoreSpec(restoreSpecPath, spec)
-			errMessege := fmt.Sprintf("Invalid restore specification path %s\n", restoreSpecPath)
-			tracelog.ErrorLogger.FatalfOnError(errMessege, err)
+			errMessage := fmt.Sprintf("Invalid restore specification path %s\n", restoreSpecPath)
+			tracelog.ErrorLogger.FatalfOnError(errMessage, err)
 		}
+
+		// directory must be empty before starting a deltaFetch
+		isEmpty, err := isDirectoryEmpty(dbDataDirectory)
+		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
+
+		if !isEmpty {
+			tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", newNonEmptyDbDataDirectoryError(dbDataDirectory))
+		}
+
 		err = deltaFetchRecursion(backup.Name, folder, utility.ResolveSymlink(dbDataDirectory), spec, filesToUnwrap)
 		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
 	}
@@ -171,18 +180,27 @@ func deltaFetchRecursion(backupName string, folder storage.Folder, dbDataDirecto
 	chooseTablespaceSpecification(sentinelDto, tablespaceSpec)
 
 	if sentinelDto.IsIncremental() {
-		tracelog.InfoLogger.Printf("Delta from %v at LSN %x \n", *(sentinelDto.IncrementFrom), *(sentinelDto.IncrementFromLSN))
+		tracelog.InfoLogger.Printf("Delta %v at LSN %x \n", backupName, *(sentinelDto.BackupStartLSN))
 		baseFilesToUnwrap, err := GetBaseFilesToUnwrap(sentinelDto.Files, filesToUnwrap)
 		if err != nil {
 			return err
 		}
+
+		err = backup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+		if err != nil {
+			return err
+		}
+		tracelog.InfoLogger.Printf("%v fetched. Downgrading from LSN %x to LSN %x \n", backupName, *(sentinelDto.BackupStartLSN), *(sentinelDto.IncrementFromLSN))
+
 		err = deltaFetchRecursion(*sentinelDto.IncrementFrom, folder, dbDataDirectory, tablespaceSpec, baseFilesToUnwrap)
 		if err != nil {
 			return err
 		}
-		tracelog.InfoLogger.Printf("%v fetched. Upgrading from LSN %x to LSN %x \n", *(sentinelDto.IncrementFrom), *(sentinelDto.IncrementFromLSN), *(sentinelDto.BackupStartLSN))
+
+		return nil
 	}
 
+	tracelog.InfoLogger.Printf("%x reached. Applying base backup... \n", *(sentinelDto.BackupStartLSN))
 	return backup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
 }
 
