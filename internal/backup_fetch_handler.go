@@ -186,12 +186,11 @@ func deltaFetchRecursion(backupName string, folder storage.Folder, dbDataDirecto
 			return err
 		}
 
-		err = backup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+		err = backup.unwrap(dbDataDirectory, sentinelDto, filesToUnwrap, false)
 		if err != nil {
 			return err
 		}
 		tracelog.InfoLogger.Printf("%v fetched. Downgrading from LSN %x to LSN %x \n", backupName, *(sentinelDto.BackupStartLSN), *(sentinelDto.IncrementFromLSN))
-
 		err = deltaFetchRecursion(*sentinelDto.IncrementFrom, folder, dbDataDirectory, tablespaceSpec, baseFilesToUnwrap)
 		if err != nil {
 			return err
@@ -199,9 +198,9 @@ func deltaFetchRecursion(backupName string, folder storage.Folder, dbDataDirecto
 
 		return nil
 	}
-
+	
 	tracelog.InfoLogger.Printf("%x reached. Applying base backup... \n", *(sentinelDto.BackupStartLSN))
-	return backup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+	return backup.unwrap(dbDataDirectory, sentinelDto, filesToUnwrap, false)
 }
 
 func GetBaseFilesToUnwrap(backupFileStates BackupFileList, currentFilesToUnwrap map[string]bool) (map[string]bool, error) {

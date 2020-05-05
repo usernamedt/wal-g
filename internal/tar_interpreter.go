@@ -46,13 +46,11 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFile(fileReader io.Reader
 	}
 
 	if !tarInterpreter.Sentinel.IsIncremental() {
-		// it is base (last to unpack) backup
-		return handleBaseBackupFile(fileReader, fileInfo, targetPath, tarInterpreter.createNewIncrementalFiles)
+		return unwrapBaseBackupFile(fileReader, fileInfo, targetPath, tarInterpreter.createNewIncrementalFiles)
 	}
 
-	// it is a delta backup
 	fileDescription, haveFileDescription := tarInterpreter.Sentinel.Files[fileInfo.Name]
-	return handleDeltaBackupFile(fileReader, fileInfo, targetPath, fileDescription, haveFileDescription,
+	return unwrapDeltaBackupFile(fileReader, fileInfo, targetPath, fileDescription, haveFileDescription,
 		tarInterpreter.createNewIncrementalFiles)
 }
 
@@ -97,7 +95,7 @@ func getLocalFileInfo(filename string) (fileInfo os.FileInfo, err error) {
 	return info, nil
 }
 
-func handleDeltaBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string,
+func unwrapDeltaBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string,
 	fileDescription BackupFileDescription, haveFileDescription, createNewIncrementalFiles bool) error {
 
 	// if local file exists
@@ -129,7 +127,7 @@ func handleDeltaBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPat
 	return writeFileToDisk(fileReader, fileInfo, targetPath)
 }
 
-func handleBaseBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, createNewIncrementalFiles bool) error {
+func unwrapBaseBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, createNewIncrementalFiles bool) error {
 	// check if local file exists, if not => just write it
 	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
 		// check if local file is page file or regular file, if page file => merge
