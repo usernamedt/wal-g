@@ -141,13 +141,7 @@ func ReadIncrementalFile(filePath string, fileSize int64, lsn uint64, deltaBitma
 // and fills it with the pages from the provided increment
 func CreateFileFromIncrement(fileName string, targetPath string, increment io.Reader) error {
 	tracelog.DebugLogger.Printf("Generating file from increment %s\n", targetPath)
-
-	fileSize, diffBlockCount, diffMap, err := getIncrementFileData(increment)
-	if err != nil {
-		return err
-	}
-
-	err = PrepareDirs(fileName, targetPath)
+	err := PrepareDirs(fileName, targetPath)
 	if err != nil {
 		return errors.Wrap(err, "Interpret: failed to create all directories")
 	}
@@ -160,8 +154,10 @@ func CreateFileFromIncrement(fileName string, targetPath string, increment io.Re
 	defer utility.LoggedClose(file, "")
 	defer file.Sync()
 
-	emptyPage := make([]byte, DatabasePageSize)
-	page := make([]byte, DatabasePageSize)
+	fileSize, diffBlockCount, diffMap, err := getIncrementFileData(increment)
+	if err != nil {
+		return err
+	}
 
 	// set represents all block numbers with non-empty pages
 	deltaBlockNumbers := make(map[uint32]bool, diffBlockCount)
@@ -169,8 +165,10 @@ func CreateFileFromIncrement(fileName string, targetPath string, increment io.Re
 		blockNo := binary.LittleEndian.Uint32(diffMap[i*sizeofInt32 : (i+1)*sizeofInt32])
 		deltaBlockNumbers[blockNo] = true
 	}
-
 	pageCount := uint32(fileSize / uint64(DatabasePageSize))
+
+	emptyPage := make([]byte, DatabasePageSize)
+	page := make([]byte, DatabasePageSize)
 	for i := uint32(0); i < pageCount; i++ {
 		if deltaBlockNumbers[i] {
 			_, err = io.ReadFull(increment, page)
@@ -198,11 +196,8 @@ func CreateFileFromIncrement(fileName string, targetPath string, increment io.Re
 	return nil
 }
 
-// MergeBaseToDelta fills empty(non-existing) pages of local file with their base version
-func MergeBaseToDelta(fileName string, base io.Reader, createNewIncrementalFiles bool) error {
-	tracelog.DebugLogger.Printf("Merging %s\n", fileName)
-
-	file, err := openFile(fileName, createNewIncrementalFiles)
+func WritePagesToFile(fileName string, pagesSource io.Reader, isIncremented, isCatchupBackup bool) error {
+	file, err := openFile(fileName, isCatchupBackup)
 	if err != nil {
 		return err
 	}
@@ -215,20 +210,43 @@ func MergeBaseToDelta(fileName string, base io.Reader, createNewIncrementalFiles
 		return err
 	}
 
+	if isIncremented {
+		tracelog.DebugLogger.Printf("Writing pages from increment: %s\n", fileName)
+		return writePagesFromIncrement(pagesSource, file, localFilePageCount, isCatchupBackup)
+	}
+
+	tracelog.DebugLogger.Printf("Filling empty pages from base: %s\n", fileName)
+	return writePagesFromBase(fileName, pagesSource, file, localFilePageCount, isCatchupBackup)
+}
+
+// writePagesFromBase fills pages of local file with their base version
+func writePagesFromBase(fileName string, base io.Reader, file *os.File, filePageCount int64, overwrite bool) error {
 	emptyPageHeader := make([]byte, headerSize)
 	pageHeader := make([]byte, headerSize)
 	page := make([]byte, DatabasePageSize)
-	for i := int64(0); i < localFilePageCount; i++ {
-		_, err = io.ReadFull(base, page)
+
+	for i := int64(0); i < filePageCount; i++ {
+		_, err := io.ReadFull(base, page)
 		if err != nil {
-			// if we reached end of increment, stop
+			// if we reached end of base file, stop
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
 
-		err = writePageIfNotExist(file, page, int64(i), pageHeader, emptyPageHeader)
+		if !overwrite {
+			isMissingPage, err := checkIfMissingPage(file, i, pageHeader, emptyPageHeader)
+			if err != nil {
+				return err
+			}
+			// if it is non-empty (not missing page), then proceed to the next one
+			if !isMissingPage {
+				continue
+			}
+		}
+
+		_, err = file.WriteAt(page, i*int64(DatabasePageSize))
 		if err != nil {
 			return err
 		}
@@ -242,35 +260,20 @@ func MergeBaseToDelta(fileName string, base io.Reader, createNewIncrementalFiles
 	return nil
 }
 
-// ApplyFileIncrement writes pages from delta according to diffMap if they are empty(non-exist) in local file
-func ApplyFileIncrement(fileName string, increment io.Reader, createNewIncrementalFiles bool) error {
-	tracelog.DebugLogger.Printf("Incrementing %s\n", fileName)
+// writePagesFromIncrement writes pages from delta according to diffMap
+func writePagesFromIncrement(increment io.Reader, file *os.File, filePageCount int64, overwrite bool) error {
+	emptyPageHeader := make([]byte, headerSize)
+	pageHeader := make([]byte, headerSize)
+	page := make([]byte, DatabasePageSize)
 
 	_, diffBlockCount, diffMap, err := getIncrementFileData(increment)
 	if err != nil {
 		return err
 	}
 
-	file, err := openFile(fileName, createNewIncrementalFiles)
-	if err != nil {
-		return err
-	}
-
-	defer utility.LoggedClose(file, "")
-	defer file.Sync()
-
-	page := make([]byte, DatabasePageSize)
-
-	localFilePageCount, err := getFilePageCount(file)
-	if err != nil {
-		return err
-	}
-
-	emptyPageHeader := make([]byte, headerSize)
-	pageHeader := make([]byte, headerSize)
 	for i := uint32(0); i < diffBlockCount; i++ {
 		blockNo := binary.LittleEndian.Uint32(diffMap[i*sizeofInt32 : (i+1)*sizeofInt32])
-		if blockNo >= uint32(localFilePageCount) {
+		if blockNo >= uint32(filePageCount) {
 			continue
 		}
 		_, err = io.ReadFull(increment, page)
@@ -278,7 +281,18 @@ func ApplyFileIncrement(fileName string, increment io.Reader, createNewIncrement
 			return err
 		}
 
-		err = writePageIfNotExist(file, page, int64(blockNo), pageHeader, emptyPageHeader)
+		if !overwrite {
+			isMissingPage, err := checkIfMissingPage(file, int64(blockNo), pageHeader, emptyPageHeader)
+			if err != nil {
+				return err
+			}
+			// if it is non-empty (not missing page), then proceed to the next one
+			if !isMissingPage {
+				continue
+			}
+		}
+
+		_, err = file.WriteAt(page, int64(blockNo)*int64(DatabasePageSize))
 		if err != nil {
 			return err
 		}
@@ -292,18 +306,13 @@ func ApplyFileIncrement(fileName string, increment io.Reader, createNewIncrement
 	return nil
 }
 
-func writePageIfNotExist(file *os.File, page []byte, blockNo int64, pageHeader, emptyPageHeader []byte) error {
-	//check if page header is empty => we can write to it
+func checkIfMissingPage(file *os.File, blockNo int64, pageHeader, emptyPageHeader []byte) (bool, error) {
 	_, err := file.ReadAt(pageHeader, blockNo*int64(DatabasePageSize))
-
-	if bytes.Equal(pageHeader, emptyPageHeader) {
-		_, err = file.WriteAt(page, blockNo*int64(DatabasePageSize))
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return false, err
 	}
 
-	return nil
+	return bytes.Equal(pageHeader, emptyPageHeader), nil
 }
 
 func getFilePageCount(file *os.File) (int64, error) {
@@ -316,10 +325,8 @@ func getFilePageCount(file *os.File) (int64, error) {
 }
 
 func openFile(fileName string, createNew bool) (*os.File, error) {
-
 	openFlags := os.O_RDWR
 
-	// ???
 	if createNew {
 		openFlags = openFlags | os.O_CREATE
 	}

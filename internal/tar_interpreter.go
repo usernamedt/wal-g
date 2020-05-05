@@ -45,13 +45,44 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFile(fileReader io.Reader
 		}
 	}
 
-	if !tarInterpreter.Sentinel.IsIncremental() {
-		return unwrapBaseBackupFile(fileReader, fileInfo, targetPath, tarInterpreter.createNewIncrementalFiles)
+	localFileExists := false
+	isPageFile := false
+	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
+		localFileExists = true
+		if isPagedFile(localFileInfo, targetPath) {
+			isPageFile = true
+		}
+	}
+	fileDescription, haveFileDescription := tarInterpreter.Sentinel.Files[fileInfo.Name]
+	isIncremented := haveFileDescription && fileDescription.IsIncremented
+	// todo: clearer catchup backup handling logic
+	// currently there is a hack to determine if we are dealing with catchup backup
+	isCatchupBackup := tarInterpreter.createNewIncrementalFiles
+
+	if localFileExists && isPageFile {
+		err := WritePagesToFile(targetPath, fileReader, isIncremented, isCatchupBackup)
+		return errors.Wrapf(err, "Interpret: failed to write pages to file '%s'", targetPath)
 	}
 
-	fileDescription, haveFileDescription := tarInterpreter.Sentinel.Files[fileInfo.Name]
-	return unwrapDeltaBackupFile(fileReader, fileInfo, targetPath, fileDescription, haveFileDescription,
-		tarInterpreter.createNewIncrementalFiles)
+	if localFileExists {
+		// if we are unpacking catchup backup
+		// then we need to write regular file from delta backup
+		if isCatchupBackup {
+			return writeFileToDisk(fileReader, fileInfo, targetPath)
+		}
+
+		// if it is a regular file, just skip it
+		// because we have newer version already on the disk
+		return nil
+	}
+
+	if isIncremented {
+		err := CreateFileFromIncrement(fileInfo.Name, targetPath, fileReader)
+		return errors.Wrapf(err, "Interpret: failed to create file from increment for '%s'", targetPath)
+	}
+
+	// write entire file to disk
+	return writeFileToDisk(fileReader, fileInfo, targetPath)
 }
 
 // Interpret extracts a tar file to disk and creates needed directories.
@@ -93,55 +124,6 @@ func getLocalFileInfo(filename string) (fileInfo os.FileInfo, err error) {
 		return nil, errors.New("Requested file is directory. Aborting.")
 	}
 	return info, nil
-}
-
-func unwrapDeltaBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string,
-	fileDescription BackupFileDescription, haveFileDescription, createNewIncrementalFiles bool) error {
-
-	// if local file exists
-	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
-		// if it is a page file, apply increment
-		if isPagedFile(localFileInfo, targetPath) {
-
-			// if current patch is not base version => apply it
-			if haveFileDescription && fileDescription.IsIncremented {
-				err := ApplyFileIncrement(targetPath, fileReader, createNewIncrementalFiles)
-				return errors.Wrapf(err, "Interpret: failed to apply increment for '%s'", targetPath)
-			}
-
-			// else, it is a base version of the page file => merge it
-			err := MergeBaseToDelta(targetPath, fileReader, createNewIncrementalFiles)
-			return errors.Wrapf(err, "Interpret: failed to merge initial file for '%s'", targetPath)
-		}
-
-		// skip the older regular file
-		return nil
-	}
-
-	if haveFileDescription && fileDescription.IsIncremented {
-		err := CreateFileFromIncrement(fileInfo.Name, targetPath, fileReader)
-		return errors.Wrapf(err, "Interpret: failed to create file from increment for '%s'", targetPath)
-	}
-
-	// write non-delta file to disk
-	return writeFileToDisk(fileReader, fileInfo, targetPath)
-}
-
-func unwrapBaseBackupFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, createNewIncrementalFiles bool) error {
-	// check if local file exists, if not => just write it
-	if localFileInfo, err := getLocalFileInfo(targetPath); err == nil {
-		// check if local file is page file or regular file, if page file => merge
-		if isPagedFile(localFileInfo, targetPath) {
-			err := MergeBaseToDelta(targetPath, fileReader, createNewIncrementalFiles)
-			return errors.Wrapf(err, "Interpret: failed to merge initial file for '%s'", targetPath)
-		}
-
-		// it is a regular file, just skip it
-		return nil
-	}
-
-	// write base file to disk
-	return writeFileToDisk(fileReader, fileInfo, targetPath)
 }
 
 func writeFileToDisk(fileReader io.Reader, fileInfo *tar.Header, targetPath string) error {
