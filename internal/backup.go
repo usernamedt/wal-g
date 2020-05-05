@@ -131,28 +131,21 @@ func (backup *Backup) fetchMeta() (ExtendedMetadataDto, error) {
 }
 
 func checkDbDirectoryForUnwrap(dbDataDirectory string, sentinelDto BackupSentinelDto) error {
-	if !sentinelDto.IsIncremental() {
-		isEmpty, err := isDirectoryEmpty(dbDataDirectory)
-		if err != nil {
-			return err
-		}
-		if !isEmpty {
-			return newNonEmptyDbDataDirectoryError(dbDataDirectory)
-		}
-	} else {
-		tracelog.DebugLogger.Println("DB data directory before increment:")
-		_ = filepath.Walk(dbDataDirectory,
-			func(path string, info os.FileInfo, err error) error {
-				if !info.IsDir() {
-					tracelog.DebugLogger.Println(path)
-				}
-				return nil
-			})
-
-		for fileName, fileDescription := range sentinelDto.Files {
-			if fileDescription.IsSkipped {
-				tracelog.DebugLogger.Printf("Skipped file %v\n", fileName)
+	tracelog.DebugLogger.Println("DB data directory before applying backup:")
+	_ = filepath.Walk(dbDataDirectory,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
+			if !info.IsDir() {
+				tracelog.DebugLogger.Println(path)
+			}
+			return nil
+		})
+
+	for fileName, fileDescription := range sentinelDto.Files {
+		if fileDescription.IsSkipped {
+			tracelog.DebugLogger.Printf("Skipped file %v\n", fileName)
 		}
 	}
 
@@ -188,8 +181,9 @@ func setTablespacePaths(spec TablespaceSpec) error {
 	return nil
 }
 
-// check that directory is empty before unwrap
-func (backup *Backup) unwrapToEmptyDirectory(
+// TODO : unit tests
+// Do the job of unpacking Backup object
+func (backup *Backup) unwrap(
 	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool, createIncrementalFiles bool,
 ) error {
 	err := checkDbDirectoryForUnwrap(dbDataDirectory, sentinelDto)
@@ -197,14 +191,6 @@ func (backup *Backup) unwrapToEmptyDirectory(
 		return err
 	}
 
-	return backup.unwrap(dbDataDirectory, sentinelDto, filesToUnwrap, createIncrementalFiles)
-}
-
-// TODO : unit tests
-// Do the job of unpacking Backup object
-func (backup *Backup) unwrap(
-	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool, createIncrementalFiles bool,
-) error {
 	tarInterpreter := NewFileTarInterpreter(dbDataDirectory, sentinelDto, filesToUnwrap, createIncrementalFiles)
 	tarsToExtract, pgControlKey, err := backup.getTarsToExtract(sentinelDto, filesToUnwrap)
 	if err != nil {

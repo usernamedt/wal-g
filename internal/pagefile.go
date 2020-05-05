@@ -11,6 +11,7 @@
 package internal
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -136,57 +137,161 @@ func ReadIncrementalFile(filePath string, fileSize int64, lsn uint64, deltaBitma
 	return pageReader, incrementSize, nil
 }
 
-// ApplyFileIncrement changes pages according to supplied change map file
-func ApplyFileIncrement(fileName string, increment io.Reader, createNewIncrementalFiles bool) error {
-	tracelog.DebugLogger.Printf("Incrementing %s\n", fileName)
-	err := ReadIncrementFileHeader(increment)
+// CreateFileFromIncrement creates empty local page file
+// and fills it with the pages from the provided increment
+func CreateFileFromIncrement(fileName string, targetPath string, increment io.Reader) error {
+	tracelog.DebugLogger.Printf("Generating file from increment %s\n", targetPath)
+	err := PrepareDirs(fileName, targetPath)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Interpret: failed to create all directories")
 	}
 
-	var fileSize uint64
-	var diffBlockCount uint32
-	err = parsingutil.ParseMultipleFieldsFromReader([]parsingutil.FieldToParse{
-		{Field: &fileSize, Name: "fileSize"},
-		{Field: &diffBlockCount, Name: "diffBlockCount"},
-	}, increment)
+	file, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Interpret: failed to create file")
 	}
 
-	diffMap := make([]byte, diffBlockCount*sizeofInt32)
-
-	_, err = io.ReadFull(increment, diffMap)
-	if err != nil {
-		return err
-	}
-
-	openFlags := os.O_RDWR
-	if createNewIncrementalFiles {
-		openFlags = openFlags | os.O_CREATE
-	}
-
-	file, err := os.OpenFile(fileName, openFlags, 0666)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return errors.Wrap(err, "incremented file should always exist")
-		}
-		return errors.Wrap(err, "can't open file to increment")
-	}
 	defer utility.LoggedClose(file, "")
 	defer file.Sync()
 
-	err = file.Truncate(int64(fileSize))
+	fileSize, diffBlockCount, diffMap, err := getIncrementFileData(increment)
 	if err != nil {
 		return err
 	}
 
-	page := make([]byte, DatabasePageSize)
+	// set represents all block numbers with non-empty pages
+	deltaBlockNumbers := make(map[uint32]bool, diffBlockCount)
 	for i := uint32(0); i < diffBlockCount; i++ {
 		blockNo := binary.LittleEndian.Uint32(diffMap[i*sizeofInt32 : (i+1)*sizeofInt32])
+		deltaBlockNumbers[blockNo] = true
+	}
+	pageCount := uint32(fileSize / uint64(DatabasePageSize))
+
+	emptyPage := make([]byte, DatabasePageSize)
+	page := make([]byte, DatabasePageSize)
+	for i := uint32(0); i < pageCount; i++ {
+		if deltaBlockNumbers[i] {
+			_, err = io.ReadFull(increment, page)
+			if err != nil {
+				return err
+			}
+			_, err = file.WriteAt(page, int64(i)*int64(DatabasePageSize))
+			if err != nil {
+				return err
+			}
+
+		} else {
+			_, err = file.WriteAt(emptyPage, int64(i)*int64(DatabasePageSize))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	all, _ := increment.Read(make([]byte, 1))
+	if all > 0 {
+		return newUnexpectedTarDataError()
+	}
+
+	return nil
+}
+
+// FillMissingPagesFromBase fills missing pages of local file with their base version
+func FillMissingPagesFromBase(fileName string, base io.Reader) error {
+	tracelog.DebugLogger.Printf("Filling empty pages from base: %s\n", fileName)
+
+	file, err := openFile(fileName, false)
+	if err != nil {
+		return err
+	}
+
+	defer utility.LoggedClose(file, "")
+	defer file.Sync()
+
+	filePageCount, err := getFilePageCount(file)
+	if err != nil {
+		return err
+	}
+
+	emptyPageHeader := make([]byte, headerSize)
+	pageHeader := make([]byte, headerSize)
+	page := make([]byte, DatabasePageSize)
+
+	for i := int64(0); i < filePageCount; i++ {
+		_, err := io.ReadFull(base, page)
+		if err != nil {
+			// if we reached end of base file, stop
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		isMissingPage, err := checkIfMissingPage(file, i, pageHeader, emptyPageHeader)
+		if err != nil {
+			return err
+		}
+		// if it is non-empty (not missing page), then proceed to the next one
+		if isMissingPage {
+			_, err = file.WriteAt(page, i*int64(DatabasePageSize))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	all, _ := base.Read(make([]byte, 1))
+	if all > 0 {
+		tracelog.DebugLogger.Printf("Skipping pages after end of the local file %s, possibly the pagefile was truncated.\n", fileName)
+	}
+
+	return nil
+}
+
+// WritePagesFromIncrement writes pages from delta according to diffMap
+func WritePagesFromIncrement(fileName string, increment io.Reader, overwrite bool) error {
+	tracelog.DebugLogger.Printf("Writing pages from increment: %s\n", fileName)
+	file, err := openFile(fileName, overwrite)
+	if err != nil {
+		return err
+	}
+
+	defer utility.LoggedClose(file, "")
+	defer file.Sync()
+
+	filePageCount, err := getFilePageCount(file)
+	if err != nil {
+		return err
+	}
+
+	emptyPageHeader := make([]byte, headerSize)
+	pageHeader := make([]byte, headerSize)
+	page := make([]byte, DatabasePageSize)
+
+	_, diffBlockCount, diffMap, err := getIncrementFileData(increment)
+	if err != nil {
+		return err
+	}
+
+	for i := uint32(0); i < diffBlockCount; i++ {
+		blockNo := binary.LittleEndian.Uint32(diffMap[i*sizeofInt32 : (i+1)*sizeofInt32])
+		if blockNo >= uint32(filePageCount) {
+			continue
+		}
 		_, err = io.ReadFull(increment, page)
 		if err != nil {
 			return err
+		}
+
+		if !overwrite {
+			isMissingPage, err := checkIfMissingPage(file, int64(blockNo), pageHeader, emptyPageHeader)
+			if err != nil {
+				return err
+			}
+			// if it is non-empty (not missing page), then proceed to the next one
+			if !isMissingPage {
+				continue
+			}
 		}
 
 		_, err = file.WriteAt(page, int64(blockNo)*int64(DatabasePageSize))
@@ -201,6 +306,67 @@ func ApplyFileIncrement(fileName string, increment io.Reader, createNewIncrement
 	}
 
 	return nil
+}
+
+func checkIfMissingPage(file *os.File, blockNo int64, pageHeader, emptyPageHeader []byte) (bool, error) {
+	_, err := file.ReadAt(pageHeader, blockNo*int64(DatabasePageSize))
+	if err != nil {
+		return false, err
+	}
+
+	return bytes.Equal(pageHeader, emptyPageHeader), nil
+}
+
+func getFilePageCount(file *os.File) (int64, error) {
+	localFileInfo, err := file.Stat()
+	if err != nil {
+		return 0, errors.Wrap(err, "error getting fileInfo")
+	}
+
+	return localFileInfo.Size() / int64(DatabasePageSize), nil
+}
+
+func openFile(fileName string, createNew bool) (*os.File, error) {
+	openFlags := os.O_RDWR
+
+	if createNew {
+		openFlags = openFlags | os.O_CREATE
+	}
+
+	file, err := os.OpenFile(fileName, openFlags, 0666)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, errors.Wrap(err, "incremented file should always exist")
+		}
+		return nil, errors.Wrap(err, "can't open file to base")
+	}
+
+	return file, nil
+}
+
+func getIncrementFileData(increment io.Reader) (uint64, uint32, []byte, error) {
+	err := ReadIncrementFileHeader(increment)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	var fileSize uint64
+	var diffBlockCount uint32
+	err = parsingutil.ParseMultipleFieldsFromReader([]parsingutil.FieldToParse{
+		{Field: &fileSize, Name: "fileSize"},
+		{Field: &diffBlockCount, Name: "diffBlockCount"},
+	}, increment)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	diffMap := make([]byte, diffBlockCount*sizeofInt32)
+
+	_, err = io.ReadFull(increment, diffMap)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	return fileSize, diffBlockCount, diffMap, nil
 }
 
 func ReadIncrementFileHeader(reader io.Reader) error {
