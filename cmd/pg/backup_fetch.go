@@ -13,7 +13,7 @@ const (
 matches given shell file pattern.
 For information about pattern syntax view: https://golang.org/pkg/path/filepath/#Match`
 	RestoreSpecDescription = "Path to file containing tablespace restore specification"
-	ReverseDeltaUnpackDescription = "Unpack delta backups in reverse order (testing)"
+	ReverseDeltaUnpackDescription = "Unpack delta backups in reverse order (beta feature)"
 )
 
 var fileMask string
