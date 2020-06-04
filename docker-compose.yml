@@ -260,6 +260,17 @@ services:
     links:
       - s3
 
+  pg_several_delta_backups_reverse_test:
+    build:
+      dockerfile: docker/pg_tests/Dockerfile_several_delta_backups_reverse_test
+      context: .
+    image: wal-g/several_delta_backups_reverse_test
+    container_name: wal-g_pg_several_delta_backups_reverse_test
+    depends_on:
+      - s3
+    links:
+      - s3
+
   pg_crypto_test:
     build:
       dockerfile: docker/pg_tests/Dockerfile_crypto_test
