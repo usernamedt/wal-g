@@ -14,12 +14,12 @@ const (
 matches given shell file pattern.
 For information about pattern syntax view: https://golang.org/pkg/path/filepath/#Match`
 	RestoreSpecDescription = "Path to file containing tablespace restore specification"
-	ReverseDeltaUnpackDescription = "Unpack delta backups in reverse order (beta feature)"
+	ReverseUnpackDescription = "Unpack backups in reverse order (beta feature)"
 )
 
 var fileMask string
 var restoreSpec string
-var reverseDeltaUnpack bool
+var useReverseUnpack bool
 
 var backupFetchCmd = &cobra.Command{
 	Use:   "backup-fetch destination_directory backup_name",
@@ -31,7 +31,7 @@ var backupFetchCmd = &cobra.Command{
 
 		var pgFetcher func(folder storage.Folder, backup internal.Backup)
 		useReverseUnpackEnv := viper.GetBool(internal.UseReverseUnpackSetting)
-		if reverseDeltaUnpack || useReverseUnpackEnv {
+		if useReverseUnpack || useReverseUnpackEnv {
 			pgFetcher = internal.GetPgFetcherNew(args[0], fileMask, restoreSpec)
 		} else {
 			pgFetcher = internal.GetPgFetcherOld(args[0], fileMask, restoreSpec)
@@ -44,7 +44,7 @@ var backupFetchCmd = &cobra.Command{
 func init() {
 	backupFetchCmd.Flags().StringVar(&fileMask, "mask", "", MaskFlagDescription)
 	backupFetchCmd.Flags().StringVar(&restoreSpec, "restore-spec", "", RestoreSpecDescription)
-	backupFetchCmd.Flags().BoolVar(&reverseDeltaUnpack, "reverse-unpack",
-		false, ReverseDeltaUnpackDescription)
+	backupFetchCmd.Flags().BoolVar(&useReverseUnpack, "reverse-unpack",
+		false, ReverseUnpackDescription)
 	Cmd.AddCommand(backupFetchCmd)
 }
