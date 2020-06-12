@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
@@ -39,6 +40,8 @@ type QueryRunner interface {
 	StartBackup(backup string) (string, string, bool, error)
 	// Inform database that contents are copied, get information on backup
 	StopBackup() (string, string, string, error)
+	// get pg_stat_all_all_tables data
+	GetStatistics()
 }
 
 // PgQueryRunner is implementation for controlling PostgreSQL 9.0+
@@ -169,4 +172,103 @@ func (queryRunner *PgQueryRunner) stopBackup() (label string, offsetMap string, 
 	}
 
 	return label, offsetMap, lsnStr, nil
+}
+
+// todo desc
+func (queryRunner *PgQueryRunner) BuildStatisticsQuery() (string, error) {
+	switch {
+	case queryRunner.Version >= 100000:
+		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
+			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
+	case queryRunner.Version >= 90600:
+		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
+			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
+	case queryRunner.Version >= 90000:
+		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
+			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
+	case queryRunner.Version == 0:
+		return "", newNoPostgresVersionError()
+	default:
+		return "", newUnsupportedPostgresVersionError(queryRunner.Version)
+	}
+}
+
+// todo desc
+func (queryRunner *PgQueryRunner) getStatistics() (map[uint32]PgStatRow, error) {
+	tracelog.InfoLogger.Println("Querying pg_stat_all_tables")
+	getStatQuery, err := queryRunner.BuildStatisticsQuery()
+	conn := queryRunner.connection
+	if err != nil {
+		return nil, errors.Wrap(err, "QueryRunner GetStatistics: Building get statistics query failed")
+	}
+
+	rows, err := conn.Query(getStatQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "QueryRunner GetStatistics: pg_stat_all_tables query failed")
+	}
+
+	defer rows.Close()
+	pgStatRows := make(map[uint32]PgStatRow)
+	for rows.Next() {
+		var statRow PgStatRow
+		var relFileNode uint32
+		if err := rows.Scan(&relFileNode, &statRow.nTupleInserted, &statRow.nTupleUpdated,
+			&statRow.nTupleDeleted); err != nil {
+			log.Println(err.Error())
+		}
+		pgStatRows[relFileNode] = statRow
+	}
+
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	return pgStatRows, nil
+}
+
+func (queryRunner *PgQueryRunner) BuildDbNamesQuery() (string, error) {
+	switch {
+	case queryRunner.Version >= 90600:
+		return "SELECT datname FROM pg_database WHERE datallowconn", nil
+	case queryRunner.Version >= 90000:
+		return "SELECT datname FROM pg_database WHERE datallowconn", nil
+	case queryRunner.Version == 0:
+		return "", newNoPostgresVersionError()
+	default:
+		return "", newUnsupportedPostgresVersionError(queryRunner.Version)
+	}
+}
+
+// todo desc
+func (queryRunner *PgQueryRunner) getDbNames() ([]string, error) {
+	tracelog.InfoLogger.Println("Querying pg_database")
+	getDbNamesQuery, err := queryRunner.BuildDbNamesQuery()
+	conn := queryRunner.connection
+	if err != nil {
+		return nil, errors.Wrap(err, "QueryRunner GetDbNames: Building db names query failed")
+	}
+
+	rows, err := conn.Query(getDbNamesQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "QueryRunner GetDbNames: pg_database query failed")
+	}
+
+	defer rows.Close()
+	dbNames := make([]string, 0)
+	for rows.Next() {
+		var dbName string
+		if err := rows.Scan(&dbName); err != nil {
+			log.Println(err.Error())
+		}
+		dbNames = append(dbNames, dbName)
+	}
+
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	return dbNames, nil
 }

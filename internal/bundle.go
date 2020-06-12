@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -34,6 +37,12 @@ type TarSizeError struct {
 	error
 }
 
+type PgStatRow struct {
+	nTupleInserted   uint64
+	nTupleUpdated    uint64
+	nTupleDeleted    uint64
+}
+
 func newTarSizeError(packedFileSize, expectedSize int64) TarSizeError {
 	return TarSizeError{errors.Errorf("packed wrong numbers of bytes %d instead of %d", packedFileSize, expectedSize)}
 }
@@ -44,6 +53,7 @@ func (err TarSizeError) Error() string {
 
 // ExcludedFilenames is a list of excluded members from the bundled backup.
 var ExcludedFilenames = make(map[string]utility.Empty)
+var tableFilenameRegexp *regexp.Regexp
 
 func init() {
 	filesToExclude := []string{
@@ -55,6 +65,8 @@ func init() {
 	for _, filename := range filesToExclude {
 		ExcludedFilenames[filename] = utility.Empty{}
 	}
+
+	tableFilenameRegexp = regexp.MustCompile("^(\\d+).*$")
 }
 
 // A Bundle represents the directory to
@@ -76,6 +88,7 @@ type Bundle struct {
 	IncrementFromFiles BackupFileList
 	DeltaMap           PagedFileDeltaMap
 	TablespaceSpec     TablespaceSpec
+	TableStatistics    map[uint32]PgStatRow
 
 	tarballQueue     chan TarBall
 	uploadQueue      chan TarBall
@@ -237,6 +250,51 @@ func (bundle *Bundle) checkTimelineChanged(conn *pgx.Conn) bool {
 	return false
 }
 
+
+// TODO desc
+func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
+	dbNames, err := getDbNames(conn)
+	if err != nil {
+		return errors.Wrap(err, "CollectStatistics: Failed to get db names.")
+	}
+
+	result := make(map[uint32]PgStatRow)
+	for _, dbName:= range dbNames {
+		databaseOption := func (c *pgx.ConnConfig) error {
+			c.Database = dbName
+			return nil
+		}
+		dbConn, err := Connect(databaseOption)
+		if err != nil {
+			tracelog.WarningLogger.Printf("Failed to collect statistics for database: %s\n'%v'\n", dbName, err)
+			continue
+		}
+
+		queryRunner, err := newPgQueryRunner(dbConn)
+		if err != nil {
+			return errors.Wrap(err, "CollectStatistics: Failed to build query runner.")
+		}
+		pgStatRows, err := queryRunner.getStatistics()
+		if err != nil {
+			return errors.Wrap(err, "CollectStatistics: Failed to collect statistics.")
+		}
+		for relFileNode, statRow:= range pgStatRows {
+			result[relFileNode] = statRow
+		}
+	}
+	bundle.TableStatistics = result
+	return nil
+}
+
+func getDbNames(conn *pgx.Conn) ([]string, error) {
+	queryRunner, err := newPgQueryRunner(conn)
+	if err != nil {
+		return nil, errors.Wrap(err, "getDbNames: Failed to build query runner.")
+	}
+	dbNames, err := queryRunner.getDbNames()
+	return dbNames, nil
+}
+
 // TODO : unit tests
 // StartBackup starts a non-exclusive base backup immediately. When finishing the backup,
 // `backup_label` and `tablespace_map` contents are not immediately written to
@@ -247,6 +305,13 @@ func (bundle *Bundle) StartBackup(conn *pgx.Conn, backup string) (backupName str
 	queryRunner, err := newPgQueryRunner(conn)
 	if err != nil {
 		return "", 0, 0, "", nil, errors.Wrap(err, "StartBackup: Failed to build query runner.")
+	}
+	pgStatRows, err := queryRunner.getStatistics()
+	if err != nil {
+		tracelog.WarningLogger.Printf("Couldn't get tables statistics because of error: '%v'\n", err)
+	}
+	for i, n := range pgStatRows {
+		tracelog.InfoLogger.Printf("%d: %d\n", i, n)
 	}
 	name, lsnStr, bundle.Replica, dataDir, err = queryRunner.startBackup(backup)
 
@@ -334,6 +399,28 @@ func (bundle *Bundle) HandleWalkedFSObject(path string, info os.FileInfo, err er
 	return nil
 }
 
+func (bundle *Bundle) getFileUpdateCount(filePath string, fileInfoHeader *tar.Header) uint64 {
+	fileName := path.Base(filePath)
+	match := tableFilenameRegexp.FindStringSubmatch(fileName)
+	relNode, err := strconv.ParseUint(match[1], 10, 32)
+	if err != nil {
+			// use the previous updates count if failed to get current
+			tracelog.WarningLogger.Printf("getFileUpdateCount: could not load file updates count, " +
+				"will try to use previous value: %s\n'%v'\n", filePath, err)
+			baseFiles := bundle.getIncrementBaseFiles()
+			baseFile, wasInBase := baseFiles[fileInfoHeader.Name]
+			if !wasInBase {
+				return 0
+			}
+			return baseFile.UpdatesCount
+	}
+	fileStat, ok := bundle.TableStatistics[uint32(relNode)]
+	if !ok {
+		return 0
+	}
+	return fileStat.nTupleDeleted + fileStat.nTupleUpdated + fileStat.nTupleInserted
+}
+
 // TODO : unit tests
 // handleTar creates underlying tar writer and handles one given file.
 // Does not follow symlinks (it seems like it does). If file is in ExcludedFilenames, will not be included
@@ -369,7 +456,8 @@ func (bundle *Bundle) handleTar(path string, info os.FileInfo) error {
 		if (wasInBase || bundle.forceIncremental) && (time.Equal(baseFile.MTime)) {
 			// File was not changed since previous backup
 			tracelog.DebugLogger.Println("Skipped due to unchanged modification time")
-			bundle.getFiles().Store(fileInfoHeader.Name, BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: time})
+			bundle.getFiles().Store(fileInfoHeader.Name,
+				BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: time, UpdatesCount: baseFile.UpdatesCount})
 			return nil
 		}
 
@@ -537,7 +625,7 @@ func (bundle *Bundle) packFileIntoTar(path string, info os.FileInfo, fileInfoHea
 	if isIncremented {
 		bitmap, err := bundle.getDeltaBitmapFor(path)
 		if _, ok := err.(NoBitmapFoundError); ok { // this file has changed after the start of backup, so just skip it
-			bundle.skipFile(fileInfoHeader, info)
+			bundle.skipFile(path, fileInfoHeader, info)
 			return nil
 		} else if err != nil {
 			return errors.Wrapf(err, "packFileIntoTar: failed to find corresponding bitmap '%s'\n", path)
@@ -574,8 +662,9 @@ func (bundle *Bundle) packFileIntoTar(path string, info os.FileInfo, fileInfoHea
 		}
 	}
 	defer utility.LoggedClose(fileReader, "")
-
-	bundle.getFiles().Store(fileInfoHeader.Name, BackupFileDescription{IsSkipped: false, IsIncremented: isIncremented, MTime: info.ModTime()})
+	updatesCount := bundle.getFileUpdateCount(path, fileInfoHeader)
+	bundle.getFiles().Store(fileInfoHeader.Name,
+		BackupFileDescription{IsSkipped: false, IsIncremented: isIncremented, MTime: info.ModTime(), UpdatesCount: updatesCount})
 
 	packedFileSize, err := PackFileTo(tarBall, fileInfoHeader, fileReader)
 	if err != nil {
@@ -589,8 +678,10 @@ func (bundle *Bundle) packFileIntoTar(path string, info os.FileInfo, fileInfoHea
 	return nil
 }
 
-func (bundle *Bundle) skipFile(fileInfoHeader *tar.Header, info os.FileInfo) {
-	bundle.getFiles().Store(fileInfoHeader.Name, BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: info.ModTime()})
+func (bundle *Bundle) skipFile(filePath string, fileInfoHeader *tar.Header, info os.FileInfo) {
+	updatesCount := bundle.getFileUpdateCount(filePath, fileInfoHeader)
+	bundle.getFiles().Store(fileInfoHeader.Name,
+		BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: info.ModTime(), UpdatesCount: updatesCount})
 }
 
 // TODO : unit tests
