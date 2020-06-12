@@ -402,6 +402,10 @@ func (bundle *Bundle) HandleWalkedFSObject(path string, info os.FileInfo, err er
 func (bundle *Bundle) getFileUpdateCount(filePath string, fileInfoHeader *tar.Header) uint64 {
 	fileName := path.Base(filePath)
 	match := tableFilenameRegexp.FindStringSubmatch(fileName)
+	if match == nil {
+		return 0
+	}
+
 	relNode, err := strconv.ParseUint(match[1], 10, 32)
 	if err != nil {
 			// use the previous updates count if failed to get current
