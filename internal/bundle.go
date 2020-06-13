@@ -392,7 +392,7 @@ func (bundle *Bundle) HandleWalkedFSObject(path string, info os.FileInfo, err er
 	return nil
 }
 
-func (bundle *Bundle) getFileUpdateCount(filePath string, fileInfoHeader *tar.Header) uint64 {
+func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
 	fileName := path.Base(filePath)
 	match := tableFilenameRegexp.FindStringSubmatch(fileName)
 	if match == nil {
@@ -401,15 +401,7 @@ func (bundle *Bundle) getFileUpdateCount(filePath string, fileInfoHeader *tar.He
 
 	relNode, err := strconv.ParseUint(match[1], 10, 32)
 	if err != nil {
-			// use the previous updates count if failed to get current
-			tracelog.WarningLogger.Printf("getFileUpdateCount: could not load file updates count, " +
-				"will try to use previous value: %s\n'%v'\n", filePath, err)
-			baseFiles := bundle.getIncrementBaseFiles()
-			baseFile, wasInBase := baseFiles[fileInfoHeader.Name]
-			if !wasInBase {
-				return 0
-			}
-			return baseFile.UpdatesCount
+		return 0
 	}
 	fileStat, ok := bundle.TableStatistics[uint32(relNode)]
 	if !ok {
@@ -453,8 +445,9 @@ func (bundle *Bundle) handleTar(path string, info os.FileInfo) error {
 		if (wasInBase || bundle.forceIncremental) && (time.Equal(baseFile.MTime)) {
 			// File was not changed since previous backup
 			tracelog.DebugLogger.Println("Skipped due to unchanged modification time")
+			updatesCount := bundle.getFileUpdateCount(path)
 			bundle.getFiles().Store(fileInfoHeader.Name,
-				BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: time, UpdatesCount: baseFile.UpdatesCount})
+				BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: time, UpdatesCount: updatesCount})
 			return nil
 		}
 
@@ -659,7 +652,7 @@ func (bundle *Bundle) packFileIntoTar(path string, info os.FileInfo, fileInfoHea
 		}
 	}
 	defer utility.LoggedClose(fileReader, "")
-	updatesCount := bundle.getFileUpdateCount(path, fileInfoHeader)
+	updatesCount := bundle.getFileUpdateCount(path)
 	bundle.getFiles().Store(fileInfoHeader.Name,
 		BackupFileDescription{IsSkipped: false, IsIncremented: isIncremented, MTime: info.ModTime(), UpdatesCount: updatesCount})
 
@@ -676,7 +669,7 @@ func (bundle *Bundle) packFileIntoTar(path string, info os.FileInfo, fileInfoHea
 }
 
 func (bundle *Bundle) skipFile(filePath string, fileInfoHeader *tar.Header, info os.FileInfo) {
-	updatesCount := bundle.getFileUpdateCount(filePath, fileInfoHeader)
+	updatesCount := bundle.getFileUpdateCount(filePath)
 	bundle.getFiles().Store(fileInfoHeader.Name,
 		BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: info.ModTime(), UpdatesCount: updatesCount})
 }
