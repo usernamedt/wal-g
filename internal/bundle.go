@@ -306,13 +306,6 @@ func (bundle *Bundle) StartBackup(conn *pgx.Conn, backup string) (backupName str
 	if err != nil {
 		return "", 0, 0, "", nil, errors.Wrap(err, "StartBackup: Failed to build query runner.")
 	}
-	pgStatRows, err := queryRunner.getStatistics()
-	if err != nil {
-		tracelog.WarningLogger.Printf("Couldn't get tables statistics because of error: '%v'\n", err)
-	}
-	for i, n := range pgStatRows {
-		tracelog.InfoLogger.Printf("%d: %d\n", i, n)
-	}
 	name, lsnStr, bundle.Replica, dataDir, err = queryRunner.startBackup(backup)
 
 	if err != nil {
