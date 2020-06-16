@@ -38,6 +38,7 @@ func unwrapToExistFile(fileReader io.Reader, fileInfo *tar.Header, targetPath st
 	if err != nil {
 		return err
 	}
+	defer localFile.Sync()
 	defer utility.LoggedClose(localFile, "")
 	if isIncremented {
 		err := WritePagesFromIncrement(fileReader, localFile, isCatchup)
@@ -64,6 +65,7 @@ func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath stri
 	if err != nil {
 		return err
 	}
+	defer localFile.Sync()
 	defer utility.LoggedClose(localFile, "")
 	if isIncremented {
 		err := CreateFileFromIncrement(fileReader, localFile)
