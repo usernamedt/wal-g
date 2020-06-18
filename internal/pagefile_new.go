@@ -53,7 +53,7 @@ func RestoreMissingPages(base io.Reader, file ReadWriterAt) error {
 func CreateFileFromIncrement(increment io.Reader, file ReadWriterAt) error {
 	tracelog.DebugLogger.Printf("Generating file from increment %s\n", file.Name())
 
-	fileSize, diffBlockCount, diffMap, err := getIncrementHeaderFields(increment)
+	fileSize, diffBlockCount, diffMap, err := GetIncrementHeaderFields(increment)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func CreateFileFromIncrement(increment io.Reader, file ReadWriterAt) error {
 func WritePagesFromIncrement(increment io.Reader, file ReadWriterAt, overwriteExisting bool) error {
 	tracelog.DebugLogger.Printf("Writing pages from increment: %s\n", file.Name())
 
-	_, diffBlockCount, diffMap, err := getIncrementHeaderFields(increment)
+	_, diffBlockCount, diffMap, err := GetIncrementHeaderFields(increment)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func getPageCount(file ReadWriterAt) (int64, error) {
 	return localFileInfo.Size() / DatabasePageSize, nil
 }
 
-func getIncrementHeaderFields(increment io.Reader) (uint64, uint32, []byte, error) {
+func GetIncrementHeaderFields(increment io.Reader) (uint64, uint32, []byte, error) {
 	err := ReadIncrementFileHeader(increment)
 	if err != nil {
 		return 0, 0, nil, err
