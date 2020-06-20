@@ -53,12 +53,18 @@ func unwrapToExistFile(fileReader io.Reader, fileInfo *tar.Header, targetPath st
 	}
 	if isPageFile {
 		err := RestoreMissingPages(fileReader, localFile)
-		interpreter.CompletedFiles <- fileInfo.Name
+		interpreter.addToCompletedFiles(fileInfo.Name)
 		return errors.Wrapf(err, "Interpret: failed to restore pages for file '%s'", targetPath)
 	}
-	interpreter.CompletedFiles <- fileInfo.Name
+	interpreter.addToCompletedFiles(fileInfo.Name)
 	// skip the non-page file because newer version is already on the disk
 	return nil
+}
+
+func (i *FileTarInterpreter) addToCompletedFiles(fileName string) {
+	i.mutex.Lock()
+	i.CompletedFiles = append(i.CompletedFiles, fileName)
+	i.mutex.Unlock()
 }
 
 // unwrap file from tar to new local file
@@ -73,7 +79,7 @@ func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath stri
 		// todo check if completed
 		return errors.Wrapf(err, "Interpret: failed to create file from increment '%s'", targetPath)
 	}
-	interpreter.CompletedFiles <- fileInfo.Name
+	interpreter.addToCompletedFiles(fileInfo.Name)
 	return writeLocalFile(fileReader, fileInfo, localFile)
 }
 

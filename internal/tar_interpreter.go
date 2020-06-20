@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/wal-g/wal-g/utility"
 
@@ -22,10 +23,11 @@ type TarInterpreter interface {
 
 // FileTarInterpreter extracts input to disk.
 type FileTarInterpreter struct {
+	mutex sync.Mutex
 	DBDataDirectory string
 	Sentinel        BackupSentinelDto
 	FilesToUnwrap   map[string]bool
-	CompletedFiles chan string
+	CompletedFiles []string
 
 	createNewIncrementalFiles bool
 }
@@ -33,8 +35,8 @@ type FileTarInterpreter struct {
 func NewFileTarInterpreter(
 	dbDataDirectory string, sentinel BackupSentinelDto, filesToUnwrap map[string]bool, createNewIncrementalFiles bool,
 ) *FileTarInterpreter {
-	return &FileTarInterpreter{dbDataDirectory, sentinel, filesToUnwrap,
-		make(chan string),createNewIncrementalFiles}
+	return &FileTarInterpreter{sync.Mutex{},dbDataDirectory, sentinel, filesToUnwrap,
+		make([]string,0),createNewIncrementalFiles}
 }
 
 // TODO : unit tests

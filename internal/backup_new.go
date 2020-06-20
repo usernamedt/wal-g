@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
 	"github.com/wal-g/tracelog"
 	"os"
@@ -77,11 +76,5 @@ func (backup *Backup) unwrapNew(
 	}
 
 	tracelog.InfoLogger.Print("\nBackup extraction complete.\n")
-	close(tarInterpreter.CompletedFiles)
-	completedFiles := make([]string, 0)
-	for i := range tarInterpreter.CompletedFiles {
-		fmt.Println("Completed file: " + i)
-		completedFiles = append(completedFiles, i)
-	}
-	return completedFiles, nil
+	return tarInterpreter.CompletedFiles, nil
 }
