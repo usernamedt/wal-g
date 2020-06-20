@@ -413,25 +413,26 @@ func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
 }
 
 
-func (bundle *Bundle) Compose() error {
+func (bundle *Bundle) Compose() (map[string][]string, error) {
 	headers, files := bundle.TarBallComposer.Compose()
 	err := bundle.writeHeaders(headers)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
+	tarFileSets := make(map[string][]string,0)
 	tarBall := bundle.Deque()
 	for _, file := range files {
 		tarBall = bundle.CheckTarSize(tarBall)
 		tarBall.SetUp(bundle.Crypter)
 		err := bundle.packFileIntoTar(file.path, file.fileInfo, file.header, file.wasInBase, tarBall)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		tarFileSets[tarBall.Name()] = append(tarFileSets[tarBall.Name()], file.header.Name)
 	}
 	bundle.tarballQueue <- tarBall
 
-	return nil
+	return tarFileSets, nil
 }
 
 func (bundle *Bundle) CheckTarSize(tarBall TarBall) TarBall {

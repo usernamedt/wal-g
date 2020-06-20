@@ -128,7 +128,7 @@ func createAndPushBackup(
 	tracelog.InfoLogger.Println("Walking ...")
 	err = filepath.Walk(archiveDirectory, bundle.HandleWalkedFSObject)
 	tracelog.ErrorLogger.FatalOnError(err)
-	err = bundle.Compose()
+	tarFileSets, err := bundle.Compose()
 	tracelog.ErrorLogger.FatalOnError(err)
 	err = bundle.FinishQueue()
 	tracelog.ErrorLogger.FatalOnError(err)
@@ -177,6 +177,7 @@ func createAndPushBackup(
 	currentBackupSentinelDto.SystemIdentifier = systemIdentifier
 	currentBackupSentinelDto.UncompressedSize = uncompressedSize
 	currentBackupSentinelDto.CompressedSize = compressedSize
+	currentBackupSentinelDto.TarFileSets = tarFileSets
 	// If pushing permanent delta backup, mark all previous backups permanent
 	// Do this before uploading current meta to ensure that backups are marked in increasing order
 	if isPermanent && currentBackupSentinelDto.IsIncremental() {
