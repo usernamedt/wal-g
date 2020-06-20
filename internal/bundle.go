@@ -590,23 +590,23 @@ func (bundle *Bundle) UploadPgControl(compressorFileExtension string) error {
 // TODO : unit tests
 // UploadLabelFiles creates the `backup_label` and `tablespace_map` files by stopping the backup
 // and uploads them to S3.
-func (bundle *Bundle) uploadLabelFiles(conn *pgx.Conn) (uint64, error) {
+func (bundle *Bundle) uploadLabelFiles(conn *pgx.Conn) (map[string][]string, uint64, error) {
 	queryRunner, err := newPgQueryRunner(conn)
 	if err != nil {
-		return 0, errors.Wrap(err, "UploadLabelFiles: Failed to build query runner.")
+		return nil, 0, errors.Wrap(err, "UploadLabelFiles: Failed to build query runner.")
 	}
 	label, offsetMap, lsnStr, err := queryRunner.stopBackup()
 	if err != nil {
-		return 0, errors.Wrap(err, "UploadLabelFiles: failed to stop backup")
+		return nil, 0, errors.Wrap(err, "UploadLabelFiles: failed to stop backup")
 	}
 
 	lsn, err := pgx.ParseLSN(lsnStr)
 	if err != nil {
-		return 0, errors.Wrap(err, "UploadLabelFiles: failed to parse finish LSN")
+		return nil, 0, errors.Wrap(err, "UploadLabelFiles: failed to parse finish LSN")
 	}
 
 	if queryRunner.Version < 90600 {
-		return lsn, nil
+		return nil, lsn, nil
 	}
 
 	bundle.NewTarBall(false)
@@ -622,7 +622,7 @@ func (bundle *Bundle) uploadLabelFiles(conn *pgx.Conn) (uint64, error) {
 
 	_, err = PackFileTo(tarBall, labelHeader, strings.NewReader(label))
 	if err != nil {
-		return 0, errors.Wrapf(err, "UploadLabelFiles: failed to put %s to tar", labelHeader.Name)
+		return nil,0, errors.Wrapf(err, "UploadLabelFiles: failed to put %s to tar", labelHeader.Name)
 	}
 	tracelog.InfoLogger.Println(labelHeader.Name)
 
@@ -635,16 +635,17 @@ func (bundle *Bundle) uploadLabelFiles(conn *pgx.Conn) (uint64, error) {
 
 	_, err = PackFileTo(tarBall, offsetMapHeader, strings.NewReader(offsetMap))
 	if err != nil {
-		return 0, errors.Wrapf(err, "UploadLabelFiles: failed to put %s to tar", offsetMapHeader.Name)
+		return nil,0, errors.Wrapf(err, "UploadLabelFiles: failed to put %s to tar", offsetMapHeader.Name)
 	}
 	tracelog.InfoLogger.Println(offsetMapHeader.Name)
-
+	tarFileSet := make(map[string][]string,0)
+	tarFileSet[tarBall.Name()] = []string{TablespaceMapFilename, BackupLabelFilename}
 	err = tarBall.CloseTar()
 	if err != nil {
-		return 0, errors.Wrap(err, "UploadLabelFiles: failed to close tarball")
+		return nil, 0, errors.Wrap(err, "UploadLabelFiles: failed to close tarball")
 	}
 
-	return lsn, nil
+	return tarFileSet, lsn, nil
 }
 
 func (bundle *Bundle) getDeltaBitmapFor(filePath string) (*roaring.Bitmap, error) {

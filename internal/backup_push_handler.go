@@ -137,9 +137,11 @@ func createAndPushBackup(
 	err = bundle.UploadPgControl(uploader.Compressor.FileExtension())
 	tracelog.ErrorLogger.FatalOnError(err)
 	// Stops backup and write/upload postgres `backup_label` and `tablespace_map` Files
-	finishLsn, err := bundle.uploadLabelFiles(conn)
+	labelFilesTarBall, finishLsn, err := bundle.uploadLabelFiles(conn)
 	tracelog.ErrorLogger.FatalOnError(err)
-
+	for tarBallName, files := range labelFilesTarBall {
+		tarFileSets[tarBallName] = files
+	}
 	timelineChanged := bundle.checkTimelineChanged(conn)
 
 	// Wait for all uploads to finish.
