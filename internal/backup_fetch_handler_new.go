@@ -76,7 +76,7 @@ func deltaFetchRecursionNew(backupName string, folder storage.Folder, dbDataDire
 
 func filterFilesToUnwrap(filesToUnwrap map[string]bool, valuesToExclude []string) map[string]bool {
 	for _, value := range valuesToExclude {
-		filesToUnwrap[value] = false
+		delete(filesToUnwrap, value)
 		fmt.Println("Excluded file " + value)
 	}
 	return filesToUnwrap
