@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/walparser"
 	"log"
 
 	"github.com/jackc/pgx"
@@ -178,15 +179,15 @@ func (queryRunner *PgQueryRunner) stopBackup() (label string, offsetMap string, 
 func (queryRunner *PgQueryRunner) BuildStatisticsQuery() (string, error) {
 	switch {
 	case queryRunner.Version >= 100000:
-		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+		return "SELECT c.relfilenode, c.reltablespace, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
 			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
 			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
 	case queryRunner.Version >= 90600:
-		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+		return "SELECT c.relfilenode, c.reltablespace, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
 			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
 			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
 	case queryRunner.Version >= 90000:
-		return "SELECT c.relfilenode, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
+		return "SELECT c.relfilenode, c.reltablespace, s.n_tup_ins, s.n_tup_upd, s.n_tup_del " +
 			"FROM pg_class c LEFT OUTER JOIN pg_stat_all_tables s ON c.oid = s.relid " +
 			"WHERE relfilenode != 0 AND n_tup_ins IS NOT NULL", nil
 	case queryRunner.Version == 0:
@@ -197,7 +198,7 @@ func (queryRunner *PgQueryRunner) BuildStatisticsQuery() (string, error) {
 }
 
 // todo desc
-func (queryRunner *PgQueryRunner) getStatistics() (map[uint32]PgStatRow, error) {
+func (queryRunner *PgQueryRunner) getStatistics(dbInfo *PgDatabaseInfo) (map[walparser.RelFileNode]PgStatRow, error) {
 	tracelog.InfoLogger.Println("Querying pg_stat_all_tables")
 	getStatQuery, err := queryRunner.BuildStatisticsQuery()
 	conn := queryRunner.connection
@@ -211,13 +212,20 @@ func (queryRunner *PgQueryRunner) getStatistics() (map[uint32]PgStatRow, error) 
 	}
 
 	defer rows.Close()
-	pgStatRows := make(map[uint32]PgStatRow)
+	pgStatRows := make(map[walparser.RelFileNode]PgStatRow)
 	for rows.Next() {
 		var statRow PgStatRow
-		var relFileNode uint32
-		if err := rows.Scan(&relFileNode, &statRow.nTupleInserted, &statRow.nTupleUpdated,
+		var relFileNodeId uint32
+		var spcNode uint32
+		if err := rows.Scan(&relFileNodeId, &spcNode, &statRow.nTupleInserted, &statRow.nTupleUpdated,
 			&statRow.nTupleDeleted); err != nil {
 			log.Println(err.Error())
+		}
+		relFileNode := walparser.RelFileNode{DBNode: dbInfo.oid,
+			RelNode: walparser.Oid(relFileNodeId), SpcNode: walparser.Oid(spcNode)}
+		// if tablespace id is zero, use the default database tablespace id
+		if relFileNode.SpcNode == walparser.Oid(0) {
+			relFileNode.SpcNode = dbInfo.tblSpcOid
 		}
 		pgStatRows[relFileNode] = statRow
 	}
@@ -229,12 +237,12 @@ func (queryRunner *PgQueryRunner) getStatistics() (map[uint32]PgStatRow, error) 
 	return pgStatRows, nil
 }
 
-func (queryRunner *PgQueryRunner) BuildDbNamesQuery() (string, error) {
+func (queryRunner *PgQueryRunner) BuildGetDatabasesQuery() (string, error) {
 	switch {
 	case queryRunner.Version >= 90600:
-		return "SELECT datname FROM pg_database WHERE datallowconn", nil
+		return "SELECT oid, datname, dattablespace FROM pg_database WHERE datallowconn", nil
 	case queryRunner.Version >= 90000:
-		return "SELECT datname FROM pg_database WHERE datallowconn", nil
+		return "SELECT oid, datname, dattablespace FROM pg_database WHERE datallowconn", nil
 	case queryRunner.Version == 0:
 		return "", newNoPostgresVersionError()
 	default:
@@ -243,32 +251,36 @@ func (queryRunner *PgQueryRunner) BuildDbNamesQuery() (string, error) {
 }
 
 // todo desc
-func (queryRunner *PgQueryRunner) getDbNames() ([]string, error) {
+func (queryRunner *PgQueryRunner) getDatabases() ([]PgDatabaseInfo, error) {
 	tracelog.InfoLogger.Println("Querying pg_database")
-	getDbNamesQuery, err := queryRunner.BuildDbNamesQuery()
+	getDbInfoQuery, err := queryRunner.BuildGetDatabasesQuery()
 	conn := queryRunner.connection
 	if err != nil {
-		return nil, errors.Wrap(err, "QueryRunner GetDbNames: Building db names query failed")
+		return nil, errors.Wrap(err, "QueryRunner GetDatabases: Building db names query failed")
 	}
 
-	rows, err := conn.Query(getDbNamesQuery)
+	rows, err := conn.Query(getDbInfoQuery)
 	if err != nil {
-		return nil, errors.Wrap(err, "QueryRunner GetDbNames: pg_database query failed")
+		return nil, errors.Wrap(err, "QueryRunner GetDatabases: pg_database query failed")
 	}
 
 	defer rows.Close()
-	dbNames := make([]string, 0)
+	databases := make([]PgDatabaseInfo, 0)
 	for rows.Next() {
-		var dbName string
-		if err := rows.Scan(&dbName); err != nil {
+		dbInfo := PgDatabaseInfo{}
+		var dbOid uint32
+		var dbTblSpcOid uint32
+		if err := rows.Scan(&dbOid, &dbInfo.name, &dbTblSpcOid); err != nil {
 			log.Println(err.Error())
 		}
-		dbNames = append(dbNames, dbName)
+		dbInfo.oid = walparser.Oid(dbOid)
+		dbInfo.tblSpcOid = walparser.Oid(dbTblSpcOid)
+		databases = append(databases, dbInfo)
 	}
 
 	if rows.Err() != nil {
 		return nil, rows.Err()
 	}
 
-	return dbNames, nil
+	return databases, nil
 }

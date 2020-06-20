@@ -3,12 +3,11 @@ package internal
 import (
 	"archive/tar"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/walparser"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -35,6 +34,12 @@ const (
 
 type TarSizeError struct {
 	error
+}
+
+type PgDatabaseInfo struct {
+	name string
+	oid walparser.Oid
+	tblSpcOid walparser.Oid
 }
 
 type PgStatRow struct {
@@ -88,7 +93,7 @@ type Bundle struct {
 	IncrementFromFiles BackupFileList
 	DeltaMap           PagedFileDeltaMap
 	TablespaceSpec     TablespaceSpec
-	TableStatistics    map[uint32]PgStatRow
+	TableStatistics    map[walparser.RelFileNode]PgStatRow
 	TarBallComposer *TarBallComposer
 
 	tarballQueue     chan TarBall
@@ -255,20 +260,20 @@ func (bundle *Bundle) checkTimelineChanged(conn *pgx.Conn) bool {
 
 // TODO desc
 func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
-	dbNames, err := getDbNames(conn)
+	databases, err := getDatabases(conn)
 	if err != nil {
 		return errors.Wrap(err, "CollectStatistics: Failed to get db names.")
 	}
 
-	result := make(map[uint32]PgStatRow)
-	for _, dbName:= range dbNames {
+	result := make(map[walparser.RelFileNode]PgStatRow)
+	for _, db := range databases {
 		databaseOption := func (c *pgx.ConnConfig) error {
-			c.Database = dbName
+			c.Database = db.name
 			return nil
 		}
 		dbConn, err := Connect(databaseOption)
 		if err != nil {
-			tracelog.WarningLogger.Printf("Failed to collect statistics for database: %s\n'%v'\n", dbName, err)
+			tracelog.WarningLogger.Printf("Failed to collect statistics for database: %s\n'%v'\n", db.name, err)
 			continue
 		}
 
@@ -276,7 +281,7 @@ func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
 		if err != nil {
 			return errors.Wrap(err, "CollectStatistics: Failed to build query runner.")
 		}
-		pgStatRows, err := queryRunner.getStatistics()
+		pgStatRows, err := queryRunner.getStatistics(&db)
 		if err != nil {
 			return errors.Wrap(err, "CollectStatistics: Failed to collect statistics.")
 		}
@@ -288,13 +293,12 @@ func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
 	return nil
 }
 
-func getDbNames(conn *pgx.Conn) ([]string, error) {
+func getDatabases(conn *pgx.Conn) ([]PgDatabaseInfo, error) {
 	queryRunner, err := newPgQueryRunner(conn)
 	if err != nil {
-		return nil, errors.Wrap(err, "getDbNames: Failed to build query runner.")
+		return nil, errors.Wrap(err, "getDatabases: Failed to build query runner.")
 	}
-	dbNames, err := queryRunner.getDbNames()
-	return dbNames, nil
+	return queryRunner.getDatabases()
 }
 
 // TODO : unit tests
@@ -395,17 +399,22 @@ func (bundle *Bundle) HandleWalkedFSObject(path string, info os.FileInfo, err er
 }
 
 func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
-	fileName := path.Base(filePath)
-	match := tableFilenameRegexp.FindStringSubmatch(fileName)
-	if match == nil {
-		return 0
-	}
-
-	relNode, err := strconv.ParseUint(match[1], 10, 32)
+	relFileNode, err := GetRelFileNodeFrom(filePath)
 	if err != nil {
+		// try parse _vm, _fsm etc
+		//fileName := path.Base(filePath)
+		//match := tableFilenameRegexp.FindStringSubmatch(fileName)
+		//if match == nil {
+		//	return 0
+		//}
+		//
+		//relNode, err := strconv.ParseUint(match[1], 10, 32)
+		//if err != nil {
+		//	return 0
+		//}
 		return 0
 	}
-	fileStat, ok := bundle.TableStatistics[uint32(relNode)]
+	fileStat, ok := bundle.TableStatistics[*relFileNode]
 	if !ok {
 		return 0
 	}
