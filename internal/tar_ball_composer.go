@@ -37,7 +37,7 @@ func (c *TarBallComposer) AddFile(path string, fileInfo os.FileInfo, wasInBase b
 
 func (c *TarBallComposer) calcUpdateRating(path string, updatesCount uint64, wasInBase bool) uint64 {
 	if !wasInBase {
-		return 0
+		return updatesCount
 	}
 	prevUpdateCount := c.IncrementFromFiles[path].UpdatesCount
 	if prevUpdateCount == 0 {
