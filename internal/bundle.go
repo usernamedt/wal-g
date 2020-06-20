@@ -89,6 +89,7 @@ type Bundle struct {
 	DeltaMap           PagedFileDeltaMap
 	TablespaceSpec     TablespaceSpec
 	TableStatistics    map[uint32]PgStatRow
+	TarBallComposer *TarBallComposer
 
 	tarballQueue     chan TarBall
 	uploadQueue      chan TarBall
@@ -116,6 +117,7 @@ func newBundle(
 		Files:              &sync.Map{},
 		TablespaceSpec:     NewTablespaceSpec(archiveDirectory),
 		forceIncremental:   forceIncremental,
+		TarBallComposer: NewTarBallComposer(incrementFromFiles),
 	}
 }
 
@@ -410,6 +412,67 @@ func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
 	return fileStat.nTupleDeleted + fileStat.nTupleUpdated + fileStat.nTupleInserted
 }
 
+
+func (bundle *Bundle) Compose() error {
+	headers, files := bundle.TarBallComposer.Compose()
+	err := bundle.writeHeaders(headers)
+	if err != nil {
+		return err
+	}
+
+	tarBall := bundle.Deque()
+	for _, file := range files {
+		tarBall = bundle.CheckTarSize(tarBall)
+		tarBall.SetUp(bundle.Crypter)
+		err := bundle.packFileIntoTar(file.path, file.fileInfo, file.header, file.wasInBase, tarBall)
+		if err != nil {
+			return err
+		}
+	}
+	bundle.tarballQueue <- tarBall
+
+	return nil
+}
+
+func (bundle *Bundle) CheckTarSize(tarBall TarBall) TarBall {
+	if tarBall.Size() > bundle.TarSizeThreshold {
+		bundle.mutex.Lock()
+		defer bundle.mutex.Unlock()
+		err := tarBall.CloseTar()
+		if err != nil {
+			panic(err)
+			//return errors.Wrap(err, "HandleWalkedFSObject: failed to close tarball")
+		}
+
+		bundle.uploadQueue <- tarBall
+		for len(bundle.uploadQueue) > bundle.maxUploadQueue {
+			select {
+			case otb := <- bundle.uploadQueue:
+				otb.AwaitUploads()
+			default:
+			}
+		}
+
+		bundle.NewTarBall(true)
+		tarBall = bundle.TarBall
+	}
+	return tarBall
+}
+
+func (bundle *Bundle) writeHeaders(headers []*tar.Header) error {
+	headersTarBall := bundle.Deque()
+	headersTarBall.SetUp(bundle.Crypter)
+	for _, header := range headers {
+		err := headersTarBall.TarWriter().WriteHeader(header)
+		if err != nil {
+			return errors.Wrap(err, "handleTar: failed to write header")
+		}
+	}
+	bundle.EnqueueBack(headersTarBall)
+	return nil
+}
+
+
 // TODO : unit tests
 // handleTar creates underlying tar writer and handles one given file.
 // Does not follow symlinks (it seems like it does). If file is in ExcludedFilenames, will not be included
@@ -435,6 +498,7 @@ func (bundle *Bundle) handleTar(path string, info os.FileInfo) error {
 	if !excluded && info.Mode().IsRegular() {
 		baseFiles := bundle.getIncrementBaseFiles()
 		baseFile, wasInBase := baseFiles[fileInfoHeader.Name]
+		updatesCount := bundle.getFileUpdateCount(path)
 		// It is important to take MTime before ReadIncrementalFile()
 		time := info.ModTime()
 
@@ -445,34 +509,14 @@ func (bundle *Bundle) handleTar(path string, info os.FileInfo) error {
 		if (wasInBase || bundle.forceIncremental) && (time.Equal(baseFile.MTime)) {
 			// File was not changed since previous backup
 			tracelog.DebugLogger.Println("Skipped due to unchanged modification time")
-			updatesCount := bundle.getFileUpdateCount(path)
 			bundle.getFiles().Store(fileInfoHeader.Name,
 				BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: time, UpdatesCount: updatesCount})
 			return nil
 		}
 
-		tarBall := bundle.Deque()
-		tarBall.SetUp(bundle.Crypter)
-		go func() {
-			// TODO: Refactor this functional mess
-			// And maybe do a better error handling
-			err := bundle.packFileIntoTar(path, info, fileInfoHeader, wasInBase, tarBall)
-			if err != nil {
-				panic(err)
-			}
-			err = bundle.CheckSizeAndEnqueueBack(tarBall)
-			if err != nil {
-				panic(err)
-			}
-		}()
+		bundle.TarBallComposer.AddFile(path,info, wasInBase, fileInfoHeader, updatesCount)
 	} else {
-		tarBall := bundle.Deque()
-		tarBall.SetUp(bundle.Crypter)
-		defer bundle.EnqueueBack(tarBall)
-		err = tarBall.TarWriter().WriteHeader(fileInfoHeader)
-		if err != nil {
-			return errors.Wrap(err, "handleTar: failed to write header")
-		}
+		bundle.TarBallComposer.AddHeader(fileInfoHeader)
 		if excluded && isDir {
 			return filepath.SkipDir
 		}
