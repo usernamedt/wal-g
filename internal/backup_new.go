@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/wal-g/tracelog"
 	"os"
@@ -43,38 +44,44 @@ func checkDbDirectoryForUnwrapNew(dbDataDirectory string, sentinelDto BackupSent
 // Do the job of unpacking Backup object
 func (backup *Backup) unwrapNew(
 	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool, createIncrementalFiles bool,
-) error {
+) ([]string, error) {
 	useNewUnwrapImplementation = true
 	err := checkDbDirectoryForUnwrapNew(dbDataDirectory, sentinelDto)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	tarInterpreter := NewFileTarInterpreter(dbDataDirectory, sentinelDto, filesToUnwrap, createIncrementalFiles)
 	tarsToExtract, pgControlKey, err := backup.getTarsToExtract(sentinelDto, filesToUnwrap)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Check name for backwards compatibility. Will check for `pg_control` if WALG version of backup.
 	needPgControl := IsPgControlRequired(backup, sentinelDto)
 
 	if pgControlKey == "" && needPgControl {
-		return newPgControlNotFoundError()
+		return nil, newPgControlNotFoundError()
 	}
 
 	err = ExtractAll(tarInterpreter, tarsToExtract)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if needPgControl {
 		err = ExtractAll(tarInterpreter, []ReaderMaker{newStorageReaderMaker(backup.getTarPartitionFolder(), pgControlKey)})
 		if err != nil {
-			return errors.Wrap(err, "failed to extract pg_control")
+			return nil, errors.Wrap(err, "failed to extract pg_control")
 		}
 	}
 
 	tracelog.InfoLogger.Print("\nBackup extraction complete.\n")
-	return nil
+	close(tarInterpreter.CompletedFiles)
+	completedFiles := make([]string, 0)
+	for i := range tarInterpreter.CompletedFiles {
+		fmt.Println("Completed file: " + i)
+		completedFiles = append(completedFiles, i)
+	}
+	return completedFiles, nil
 }

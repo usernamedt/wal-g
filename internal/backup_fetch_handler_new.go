@@ -54,11 +54,11 @@ func deltaFetchRecursionNew(backupName string, folder storage.Folder, dbDataDire
 		if err != nil {
 			return err
 		}
-
-		err = backup.unwrapNew(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+		completedFiles, err := backup.unwrapNew(dbDataDirectory, sentinelDto, filesToUnwrap, false)
 		if err != nil {
 			return err
 		}
+		baseFilesToUnwrap = filterFilesToUnwrap(baseFilesToUnwrap, completedFiles)
 		tracelog.InfoLogger.Printf("%v fetched. Downgrading from LSN %x to LSN %x \n", backupName, *(sentinelDto.BackupStartLSN), *(sentinelDto.IncrementFromLSN))
 		err = deltaFetchRecursionNew(*sentinelDto.IncrementFrom, folder, dbDataDirectory, tablespaceSpec, baseFilesToUnwrap)
 		if err != nil {
@@ -69,5 +69,15 @@ func deltaFetchRecursionNew(backupName string, folder storage.Folder, dbDataDire
 	}
 
 	tracelog.InfoLogger.Printf("%x reached. Applying base backup... \n", *(sentinelDto.BackupStartLSN))
-	return backup.unwrapNew(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+	_, err = backup.unwrapNew(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+	return err
+}
+
+
+func filterFilesToUnwrap(filesToUnwrap map[string]bool, valuesToExclude []string) map[string]bool {
+	for _, value := range valuesToExclude {
+		filesToUnwrap[value] = false
+		fmt.Println("Excluded file " + value)
+	}
+	return filesToUnwrap
 }

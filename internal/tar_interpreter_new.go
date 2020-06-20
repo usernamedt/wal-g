@@ -26,20 +26,21 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFileNew(fileReader io.Rea
 
 	if localFileInfo, _ := getLocalFileInfo(targetPath); localFileInfo != nil {
 		isPageFile := isPagedFile(localFileInfo, targetPath)
-		return unwrapToExistFile(fileReader, fileInfo, targetPath, isPageFile, isIncremented, isCatchup)
+		return unwrapToExistFile(fileReader, fileInfo, targetPath, isPageFile, isIncremented, isCatchup, tarInterpreter)
 	}
-	return unwrapToNewFile(fileReader, fileInfo, targetPath, isIncremented)
+	return unwrapToNewFile(fileReader, fileInfo, targetPath, isIncremented, tarInterpreter)
 }
 
 // unwrap the file from tar to existing local file
 func unwrapToExistFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string,
-	isPageFile, isIncremented, isCatchup bool) error {
+	isPageFile, isIncremented, isCatchup bool, interpreter *FileTarInterpreter) error {
 	localFile, err := os.OpenFile(targetPath, os.O_RDWR, 0666)
 	if err != nil {
 		return err
 	}
 	defer utility.LoggedClose(localFile, "")
 	if isIncremented {
+		// todo check if completed
 		err := WritePagesFromIncrement(fileReader, localFile, isCatchup)
 		return errors.Wrapf(err, "Interpret: failed to write increment to file '%s'", targetPath)
 	}
@@ -52,14 +53,16 @@ func unwrapToExistFile(fileReader io.Reader, fileInfo *tar.Header, targetPath st
 	}
 	if isPageFile {
 		err := RestoreMissingPages(fileReader, localFile)
+		interpreter.CompletedFiles <- fileInfo.Name
 		return errors.Wrapf(err, "Interpret: failed to restore pages for file '%s'", targetPath)
 	}
+	interpreter.CompletedFiles <- fileInfo.Name
 	// skip the non-page file because newer version is already on the disk
 	return nil
 }
 
 // unwrap file from tar to new local file
-func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, isIncremented bool) error {
+func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, isIncremented bool, interpreter *FileTarInterpreter) error {
 	localFile, err := createLocalFile(targetPath, fileInfo)
 	if err != nil {
 		return err
@@ -67,8 +70,10 @@ func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath stri
 	defer utility.LoggedClose(localFile, "")
 	if isIncremented {
 		err := CreateFileFromIncrement(fileReader, localFile)
+		// todo check if completed
 		return errors.Wrapf(err, "Interpret: failed to create file from increment '%s'", targetPath)
 	}
+	interpreter.CompletedFiles <- fileInfo.Name
 	return writeLocalFile(fileReader, fileInfo, localFile)
 }
 
