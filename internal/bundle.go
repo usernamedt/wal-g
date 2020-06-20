@@ -433,6 +433,7 @@ func (bundle *Bundle) Compose() (map[string][]string, error) {
 	prevUpdateRating := uint64(0)
 	for _, file := range files {
 		tarBall = bundle.CheckTarBall(tarBall, prevUpdateRating, file.updateRating)
+		prevUpdateRating = file.updateRating
 		tarBall.SetUp(bundle.Crypter)
 		err := bundle.packFileIntoTar(file.path, file.fileInfo, file.header, file.wasInBase, tarBall)
 		if err != nil {
