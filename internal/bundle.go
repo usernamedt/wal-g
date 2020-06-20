@@ -430,8 +430,9 @@ func (bundle *Bundle) Compose() (map[string][]string, error) {
 	}
 	tarFileSets := make(map[string][]string,0)
 	tarBall := bundle.Deque()
+	prevUpdateRating := uint64(0)
 	for _, file := range files {
-		tarBall = bundle.CheckTarSize(tarBall)
+		tarBall = bundle.CheckTarBall(tarBall, prevUpdateRating, file.updateRating)
 		tarBall.SetUp(bundle.Crypter)
 		err := bundle.packFileIntoTar(file.path, file.fileInfo, file.header, file.wasInBase, tarBall)
 		if err != nil {
@@ -444,8 +445,8 @@ func (bundle *Bundle) Compose() (map[string][]string, error) {
 	return tarFileSets, nil
 }
 
-func (bundle *Bundle) CheckTarSize(tarBall TarBall) TarBall {
-	if tarBall.Size() > bundle.TarSizeThreshold {
+func (bundle *Bundle) CheckTarBall(tarBall TarBall, prevUpdateRating, updateRating uint64) TarBall {
+	if tarBall.Size() > bundle.TarSizeThreshold || prevUpdateRating == 0 && updateRating > 0 && tarBall.Size() > 0 {
 		bundle.mutex.Lock()
 		defer bundle.mutex.Unlock()
 		err := tarBall.CloseTar()
