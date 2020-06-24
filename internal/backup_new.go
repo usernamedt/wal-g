@@ -10,6 +10,23 @@ import (
 // temporary flag is used in tar interpreter to determine if it should use new unwrap logic
 var useNewUnwrapImplementation = false
 
+// UnwrapResult stores information about
+// the result of single unwrap operation
+type UnwrapResult struct {
+	// completely restored files
+	completedFiles []string
+	// for each created page file
+	// store count of blocks left to restore
+	createdPageFiles map[string]int
+	// for those page files to which the increment was applied
+	// store count of written increment blocks
+	writtenIncrementFiles map[string]int
+}
+
+func newUnwrapResult(completedFiles []string, createdPageFiles, writtenIncrementFiles map[string]int) *UnwrapResult {
+	return &UnwrapResult{completedFiles, createdPageFiles, writtenIncrementFiles}
+}
+
 func checkDbDirectoryForUnwrapNew(dbDataDirectory string, sentinelDto BackupSentinelDto) error {
 	tracelog.DebugLogger.Println("DB data directory before applying backup:")
 	_ = filepath.Walk(dbDataDirectory,
@@ -42,8 +59,8 @@ func checkDbDirectoryForUnwrapNew(dbDataDirectory string, sentinelDto BackupSent
 // TODO : unit tests
 // Do the job of unpacking Backup object
 func (backup *Backup) unwrapNew(
-	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool, createIncrementalFiles bool,
-) ([]string, error) {
+	dbDataDirectory string, sentinelDto BackupSentinelDto, filesToUnwrap map[string]bool,
+	createIncrementalFiles bool) (*UnwrapResult, error) {
 	useNewUnwrapImplementation = true
 	err := checkDbDirectoryForUnwrapNew(dbDataDirectory, sentinelDto)
 	if err != nil {
@@ -76,5 +93,7 @@ func (backup *Backup) unwrapNew(
 	}
 
 	tracelog.InfoLogger.Print("\nBackup extraction complete.\n")
-	return tarInterpreter.CompletedFiles, nil
+	unwrapResult := newUnwrapResult(tarInterpreter.CompletedFiles, tarInterpreter.CreatedPageFiles,
+		tarInterpreter.WrittenIncrementFiles)
+	return unwrapResult, nil
 }

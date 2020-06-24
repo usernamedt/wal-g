@@ -61,12 +61,6 @@ func unwrapToExistFile(fileReader io.Reader, fileInfo *tar.Header, targetPath st
 	return nil
 }
 
-func (i *FileTarInterpreter) addToCompletedFiles(fileName string) {
-	i.mutex.Lock()
-	i.CompletedFiles = append(i.CompletedFiles, fileName)
-	i.mutex.Unlock()
-}
-
 // unwrap file from tar to new local file
 func unwrapToNewFile(fileReader io.Reader, fileInfo *tar.Header, targetPath string, isIncremented bool, interpreter *FileTarInterpreter) error {
 	localFile, err := createLocalFile(targetPath, fileInfo)
@@ -139,4 +133,22 @@ func writeLocalFile(fileReader io.Reader, fileInfo *tar.Header, localFile *os.Fi
 
 	err = localFile.Sync()
 	return errors.Wrap(err, "Interpret: fsync failed")
+}
+
+func (tarInterpreter *FileTarInterpreter) addToCompletedFiles(fileName string) {
+	tarInterpreter.mutex.Lock()
+	tarInterpreter.CompletedFiles = append(tarInterpreter.CompletedFiles, fileName)
+	tarInterpreter.mutex.Unlock()
+}
+
+func (tarInterpreter *FileTarInterpreter) addToCreatedPageFiles(fileName string, blocksToRestoreCount int) {
+	tarInterpreter.mutex.Lock()
+	tarInterpreter.CreatedPageFiles[fileName] = blocksToRestoreCount
+	tarInterpreter.mutex.Unlock()
+}
+
+func (tarInterpreter *FileTarInterpreter) addToWrittenIncrementFiles(fileName string, writtenBlocksCount int) {
+	tarInterpreter.mutex.Lock()
+	tarInterpreter.WrittenIncrementFiles[fileName] = writtenBlocksCount
+	tarInterpreter.mutex.Unlock()
 }

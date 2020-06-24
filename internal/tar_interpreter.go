@@ -28,6 +28,8 @@ type FileTarInterpreter struct {
 	Sentinel        BackupSentinelDto
 	FilesToUnwrap   map[string]bool
 	CompletedFiles []string
+	CreatedPageFiles map[string]int
+	WrittenIncrementFiles map[string]int
 
 	createNewIncrementalFiles bool
 }
@@ -35,8 +37,9 @@ type FileTarInterpreter struct {
 func NewFileTarInterpreter(
 	dbDataDirectory string, sentinel BackupSentinelDto, filesToUnwrap map[string]bool, createNewIncrementalFiles bool,
 ) *FileTarInterpreter {
-	return &FileTarInterpreter{sync.Mutex{},dbDataDirectory, sentinel, filesToUnwrap,
-		make([]string,0),createNewIncrementalFiles}
+	return &FileTarInterpreter{sync.Mutex{},dbDataDirectory, sentinel,
+		filesToUnwrap,make([]string,0), make(map[string]int),
+		make(map[string]int),createNewIncrementalFiles}
 }
 
 // TODO : unit tests
