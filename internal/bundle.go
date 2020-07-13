@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -58,7 +57,6 @@ func (err TarSizeError) Error() string {
 
 // ExcludedFilenames is a list of excluded members from the bundled backup.
 var ExcludedFilenames = make(map[string]utility.Empty)
-var tableFilenameRegexp *regexp.Regexp
 
 func init() {
 	filesToExclude := []string{
@@ -70,8 +68,6 @@ func init() {
 	for _, filename := range filesToExclude {
 		ExcludedFilenames[filename] = utility.Empty{}
 	}
-
-	tableFilenameRegexp = regexp.MustCompile("^(\\d+).*$")
 }
 
 // A Bundle represents the directory to
