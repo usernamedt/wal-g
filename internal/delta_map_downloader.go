@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
+	"time"
 )
 
 func getDeltaMap(folder storage.Folder, timeline uint32, firstUsedLSN, firstNotUsedLSN uint64) (PagedFileDeltaMap, error) {
@@ -13,6 +14,7 @@ func getDeltaMap(folder storage.Folder, timeline uint32, firstUsedLSN, firstNotU
 	deltaMap := NewPagedFileDeltaMap()
 	firstUsedDeltaNo, firstNotUsedDeltaNo := getDeltaRange(firstUsedLSN, firstNotUsedLSN)
 	// Get locations from [firstUsedDeltaNo, lastUsedDeltaNo). We use lastUsedDeltaNo in next step
+	time.Sleep(10 * time.Second)
 	err := deltaMap.getLocationsFromDeltas(folder, timeline, firstUsedDeltaNo, firstNotUsedDeltaNo.previous())
 	if err != nil {
 		return deltaMap, errors.Wrapf(err, "Error during fetch locations from delta files.\n")
