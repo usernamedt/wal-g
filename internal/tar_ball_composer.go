@@ -95,8 +95,7 @@ func (c *TarBallComposer) Compose() ([]*tar.Header, []*TarFilesCollection) {
 		// if the estimated size of the current collection exceeds the threshold,
 		// or if the updateRating just went to non-zero from zero,
 		// start packing to the new tar files collection
-		if currentFilesCollection.expectedSize > 0 &&
-			currentFilesCollection.expectedSize + file.expectedSize > c.tarSizeThreshold ||
+		if currentFilesCollection.expectedSize > c.tarSizeThreshold ||
 			prevUpdateRating == 0 && file.updateRating > 0 {
 			tarFilesCollections = append(tarFilesCollections, currentFilesCollection)
 			currentFilesCollection = newTarFilesCollection()
