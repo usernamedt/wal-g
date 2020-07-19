@@ -57,5 +57,5 @@ func getWalSegmentRange(firstNotUsedDeltaNo DeltaNo, firstNotUsedLsn uint64) (Wa
 	firstUsedWalSegmentNo := firstNotUsedDeltaNo.firstWalSegmentNo()
 	lastUsedLsn := firstNotUsedLsn - 1
 	lastUsedWalSegmentNo := newWalSegmentNo(lastUsedLsn)
-	return firstUsedWalSegmentNo, lastUsedWalSegmentNo.next()
+	return firstUsedWalSegmentNo, lastUsedWalSegmentNo
 }
