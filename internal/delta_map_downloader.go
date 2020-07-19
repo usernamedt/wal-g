@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
@@ -16,31 +15,26 @@ func getDeltaMap(folder storage.Folder, timeline uint32, firstUsedLSN, firstNotU
 	firstUsedDeltaNo, firstNotUsedDeltaNo := getDeltaRange(firstUsedLSN, firstNotUsedLSN)
 	// Get locations from [firstUsedDeltaNo, lastUsedDeltaNo). We use lastUsedDeltaNo in next step
 	time.Sleep(10 * time.Second)
-	fmt.Print("GET LOCATION FROM DELTAS")
 	err := deltaMap.getLocationsFromDeltas(folder, timeline, firstUsedDeltaNo, firstNotUsedDeltaNo.previous())
 	if err != nil {
 		return deltaMap, errors.Wrapf(err, "Error during fetch locations from delta files.\n")
 	}
 
 	time.Sleep(10 * time.Second)
-	fmt.Print("GET LAST DELTA FILE")
 	// Handle last delta file separately for fetch locations and walParser from it
 	lastDeltaFile, err := getDeltaFile(folder, firstNotUsedDeltaNo.previous().getFilename(timeline))
 	if err != nil {
 		return deltaMap, errors.Wrapf(err, "Error during downloading last delta file.\n")
 	}
 	time.Sleep(10 * time.Second)
-	fmt.Print("ADD LOCATIONS TO DELTA")
 	deltaMap.AddLocationsToDelta(lastDeltaFile.Locations)
 
 	time.Sleep(10 * time.Second)
-	fmt.Print("GET WAL SEGMENT RANGE LOCATIONS TO DELTA")
-	firstUsedWalSegmentNo, firstNotUsedWalSegmentNo := getWalSegmentRange(firstNotUsedDeltaNo, firstNotUsedLSN)
+	firstUsedWalSegmentNo, lastUsedWalSegmentNo := getWalSegmentRange(firstNotUsedDeltaNo, firstUsedLSN, firstNotUsedLSN)
 
 	time.Sleep(10 * time.Second)
-	fmt.Print("GET LOCATIONS FROM WALS")
 	// we handle WAL files from [firstUsedWalSegmentNo, lastUsedWalSegmentNo]
-	err = deltaMap.getLocationsFromWals(folder, timeline, firstUsedWalSegmentNo, firstNotUsedWalSegmentNo, lastDeltaFile.WalParser)
+	err = deltaMap.getLocationsFromWals(folder, timeline, firstUsedWalSegmentNo, lastUsedWalSegmentNo, lastDeltaFile.WalParser)
 	if err != nil {
 		return deltaMap, errors.Wrapf(err, "Error during fetch locations from wal segments.\n")
 	}
@@ -53,9 +47,18 @@ func getDeltaRange(firstUsedLsn, firstNotUsedLsn uint64) (DeltaNo, DeltaNo) {
 	return firstUsedDeltaNo, firstNotUsedDeltaNo
 }
 
-func getWalSegmentRange(firstNotUsedDeltaNo DeltaNo, firstNotUsedLsn uint64) (WalSegmentNo, WalSegmentNo) {
-	firstUsedWalSegmentNo := firstNotUsedDeltaNo.firstWalSegmentNo()
+func getWalSegmentRange(firstNotUsedDeltaNo DeltaNo, firstUsedLsn, firstNotUsedLsn uint64) (WalSegmentNo, WalSegmentNo) {
+	firstUsedWalSegmentNo := getFirstUsedWalSegmentNo(firstNotUsedDeltaNo, firstUsedLsn)
 	lastUsedLsn := firstNotUsedLsn - 1
 	lastUsedWalSegmentNo := newWalSegmentNo(lastUsedLsn)
 	return firstUsedWalSegmentNo, lastUsedWalSegmentNo
+}
+
+func getFirstUsedWalSegmentNo(firstNotUsedDeltaNo DeltaNo, firstUsedLsn uint64) WalSegmentNo {
+	firstUsedLsnSegmentNo := newWalSegmentNo(firstUsedLsn)
+	firstNotUsedDeltaSegmentNo := firstNotUsedDeltaNo.firstWalSegmentNo()
+	if firstUsedLsnSegmentNo > firstNotUsedDeltaSegmentNo {
+		return firstUsedLsnSegmentNo
+	}
+	return firstNotUsedDeltaSegmentNo
 }
