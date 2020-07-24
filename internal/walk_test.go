@@ -338,7 +338,7 @@ func TestWalk(t *testing.T) {
 		TarSizeThreshold: int64(10),
 		Files:            &sync.Map{},
 		TablespaceSpec:   internal.NewTablespaceSpec(data),
-		TarBallComposer:  internal.NewTarBallComposer(uint64(10),
+		TarBallComposer:  internal.NewStatisticsTarBallComposer(uint64(10),
 			internal.NewDefaultComposeRatingEvaluator(make(map[string]internal.BackupFileDescription))),
 	}
 	compressed := filepath.Join(filepath.Dir(data), "compressed")

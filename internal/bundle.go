@@ -90,7 +90,7 @@ type Bundle struct {
 	DeltaMap           PagedFileDeltaMap
 	TablespaceSpec     TablespaceSpec
 	RelationsStats     map[walparser.RelFileNode]PgRelationStat
-	TarBallComposer    *TarBallComposer
+	TarBallComposer    *StatisticsTarBallComposer
 
 	tarballQueue     chan TarBall
 	uploadQueue      chan TarBall
@@ -119,7 +119,7 @@ func newBundle(
 		Files:              &sync.Map{},
 		TablespaceSpec:     NewTablespaceSpec(archiveDirectory),
 		forceIncremental:   forceIncremental,
-		TarBallComposer:    NewTarBallComposer(uint64(tarSizeThreshold),
+		TarBallComposer:    NewStatisticsTarBallComposer(uint64(tarSizeThreshold),
 			NewDefaultComposeRatingEvaluator(incrementFromFiles)),
 	}
 }
@@ -352,62 +352,6 @@ func (bundle *Bundle) HandleWalkedFSObject(path string, info os.FileInfo, err er
 	return nil
 }
 
-// CollectStatistics collects statistics for each relFileNode
-func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
-	databases, err := getDatabaseInfos(conn)
-	if err != nil {
-		return errors.Wrap(err, "CollectStatistics: Failed to get db names.")
-	}
-
-	result := make(map[walparser.RelFileNode]PgRelationStat)
-	for _, db := range databases {
-		databaseOption := func (c *pgx.ConnConfig) error {
-			c.Database = db.name
-			return nil
-		}
-		dbConn, err := Connect(databaseOption)
-		if err != nil {
-			tracelog.WarningLogger.Printf("Failed to collect statistics for database: %s\n'%v'\n", db.name, err)
-			continue
-		}
-
-		queryRunner, err := newPgQueryRunner(dbConn)
-		if err != nil {
-			return errors.Wrap(err, "CollectStatistics: Failed to build query runner.")
-		}
-		pgStatRows, err := queryRunner.getStatistics(&db)
-		if err != nil {
-			return errors.Wrap(err, "CollectStatistics: Failed to collect statistics.")
-		}
-		for relFileNode, statRow:= range pgStatRows {
-			result[relFileNode] = statRow
-		}
-	}
-	bundle.RelationsStats = result
-	return nil
-}
-
-func getDatabaseInfos(conn *pgx.Conn) ([]PgDatabaseInfo, error) {
-	queryRunner, err := newPgQueryRunner(conn)
-	if err != nil {
-		return nil, errors.Wrap(err, "getDatabaseInfos: Failed to build query runner.")
-	}
-	return queryRunner.getDatabaseInfos()
-}
-
-func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
-	relFileNode, err := GetRelFileNodeFrom(filePath)
-	if err != nil {
-		// TODO: try parse _vm, _fsm etc
-		// and assign the update count from corresponding tables
-		return 0
-	}
-	fileStat, ok := bundle.RelationsStats[*relFileNode]
-	if !ok {
-		return 0
-	}
-	return fileStat.deletedTuplesCount + fileStat.updatedTuplesCount + fileStat.insertedTuplesCount
-}
 
 func (bundle *Bundle) PackTarballs() (map[string][]string, error) {
 	headers, tarFilesCollections := bundle.TarBallComposer.Compose()
