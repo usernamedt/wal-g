@@ -151,7 +151,7 @@ func (r *WalSegmentRunner) nextSegment() (WalSegmentNo, uint32, error) {
 	}
 	// if failed to fetch WAL file, try to get .history file in case of timeline switch
 	if !fileExists {
-		if record, ok := r.getTimelineSwitchRecord(nextSegmentNo); ok {
+		if record, ok := r.getTimelineSwitchRecord(r.currentWalSegmentNo); ok {
 			r.currentTimeline = record.timeline
 			return r.nextSegment()
 		}
@@ -173,7 +173,11 @@ func parseHistoryFile(readCloser io.ReadCloser) (historyRecords []*WalHistoryRec
 	scanner := bufio.NewScanner(readCloser)
 	historyRecords = make([]*WalHistoryRecord, 0)
 	for scanner.Scan() {
-		record, err := newWalHistoryRecordFromString(scanner.Text())
+		nextRow := scanner.Text()
+		if nextRow == "" {
+			continue
+		}
+		record, err := newWalHistoryRecordFromString(nextRow)
 		if record == nil {
 			break
 		}
@@ -182,7 +186,8 @@ func parseHistoryFile(readCloser io.ReadCloser) (historyRecords []*WalHistoryRec
 		}
 		historyRecords = append(historyRecords, record)
 	}
-	return historyRecords, nil
+	err = readCloser.Close()
+	return historyRecords, err
 }
 
 func getHistoryFile(timeline uint32, folder storage.Folder) (io.ReadCloser, error) {
