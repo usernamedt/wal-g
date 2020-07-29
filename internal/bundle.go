@@ -400,6 +400,9 @@ func getDatabaseInfos(conn *pgx.Conn) ([]PgDatabaseInfo, error) {
 }
 
 func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
+	if bundle.RelationsStats == nil {
+		return 0
+	}
 	relFileNode, err := GetRelFileNodeFrom(filePath)
 	if err != nil {
 		// TODO: try parse _vm, _fsm etc
@@ -531,7 +534,7 @@ func (bundle *Bundle) addToBundle(path string, info os.FileInfo) error {
 	} else {
 		bundle.TarBallComposer.AddHeader(fileInfoHeader)
 		bundle.getFiles().Store(fileInfoHeader.Name,
-			BackupFileDescription{IsSkipped: false, IsIncremented: false, MTime: info.ModTime(), UpdatesCount: 0})
+			BackupFileDescription{IsSkipped: false, IsIncremented: false, MTime: info.ModTime()})
 		if excluded && isDir {
 			return filepath.SkipDir
 		}
