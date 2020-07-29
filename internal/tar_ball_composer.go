@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"os"
 	"sort"
+	"sync"
 )
 
 // TarBallComposer receives all files and tar headers
@@ -13,6 +14,7 @@ import (
 // It also should compose tarballs in the future,
 // but atm tarballs composing logic is in the bundle.go
 type TarBallComposer struct {
+	mutex            sync.Mutex
 	headersToCompose       []*tar.Header
 	files                  []*ComposeFileInfo
 	tarSizeThreshold       uint64
@@ -74,6 +76,8 @@ func (c *TarBallComposer) AddHeader(fileInfoHeader *tar.Header) {
 
 func (c *TarBallComposer) AddFile(path string, fileInfo os.FileInfo, wasInBase bool,
 	header *tar.Header, updatesCount uint64, expectedFileSize uint64) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	updateRating := c.composeRatingEvaluator.Evaluate(path, updatesCount, wasInBase)
 	newFile := newComposeFileInfo(path, fileInfo, wasInBase, header, updatesCount, updateRating, expectedFileSize)
 	c.files = append(c.files, newFile)

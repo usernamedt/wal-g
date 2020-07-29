@@ -3,14 +3,13 @@ package internal
 import (
 	"archive/tar"
 	"fmt"
+	"github.com/spf13/viper"
 	"github.com/wal-g/wal-g/internal/walparser"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/spf13/viper"
 
 	"io/ioutil"
 
@@ -88,6 +87,8 @@ type Bundle struct {
 	IncrementFromLsn   *uint64
 	IncrementFromFiles BackupFileList
 	DeltaMap           PagedFileDeltaMap
+	DeltaMapComplete   bool
+	DeltaMapMutex      sync.Mutex
 	TablespaceSpec     TablespaceSpec
 	RelationsStats     map[walparser.RelFileNode]PgRelationStat
 	TarBallComposer    *TarBallComposer
@@ -100,7 +101,17 @@ type Bundle struct {
 	started          bool
 	forceIncremental bool
 
-	Files *sync.Map
+	Files            *sync.Map
+	addToBundleQueue chan *AddToBundleTask
+	walkWaitGroup    sync.WaitGroup
+}
+
+type AddToBundleTask struct {
+	path           string
+	info           os.FileInfo
+	wasInBase      bool
+	fileInfoHeader *tar.Header
+	updatesCount   uint64
 }
 
 // TODO: use DiskDataFolder
@@ -119,7 +130,7 @@ func newBundle(
 		Files:              &sync.Map{},
 		TablespaceSpec:     NewTablespaceSpec(archiveDirectory),
 		forceIncremental:   forceIncremental,
-		TarBallComposer:    NewTarBallComposer(uint64(tarSizeThreshold),
+		TarBallComposer: NewTarBallComposer(uint64(tarSizeThreshold),
 			NewDefaultComposeRatingEvaluator(incrementFromFiles)),
 	}
 }
@@ -135,13 +146,22 @@ func (bundle *Bundle) StartQueue() error {
 		panic("Trying to start already started Queue")
 	}
 	var err error
-	bundle.parallelTarballs, err = getMaxUploadDiskConcurrency()
+	maxUploadDiskConcurrency, err := getMaxUploadDiskConcurrency()
 	if err != nil {
 		return err
 	}
+	bundle.parallelTarballs = maxUploadDiskConcurrency
 	bundle.maxUploadQueue, err = getMaxUploadQueue()
 	if err != nil {
 		return err
+	}
+
+	bundle.addToBundleQueue = make(chan *AddToBundleTask, maxUploadDiskConcurrency)
+	fmt.Println("Going to start workers")
+	for i := 0; i < maxUploadDiskConcurrency; i++ {
+		bundle.walkWaitGroup.Add(1)
+		fmt.Println("Started worker")
+		go bundle.addFileToBundle(bundle.addToBundleQueue)
 	}
 
 	bundle.tarballQueue = make(chan TarBall, bundle.parallelTarballs)
@@ -361,7 +381,7 @@ func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
 
 	result := make(map[walparser.RelFileNode]PgRelationStat)
 	for _, db := range databases {
-		databaseOption := func (c *pgx.ConnConfig) error {
+		databaseOption := func(c *pgx.ConnConfig) error {
 			c.Database = db.name
 			return nil
 		}
@@ -379,7 +399,7 @@ func (bundle *Bundle) CollectStatistics(conn *pgx.Conn) error {
 		if err != nil {
 			return errors.Wrap(err, "CollectStatistics: Failed to collect statistics.")
 		}
-		for relFileNode, statRow:= range pgStatRows {
+		for relFileNode, statRow := range pgStatRows {
 			result[relFileNode] = statRow
 		}
 	}
@@ -410,6 +430,10 @@ func (bundle *Bundle) getFileUpdateCount(filePath string) uint64 {
 }
 
 func (bundle *Bundle) PackTarballs() (map[string][]string, error) {
+	close(bundle.addToBundleQueue)
+	fmt.Println("Waiting for walk to finish")
+	bundle.walkWaitGroup.Wait()
+	fmt.Println("Walk finished!")
 	headers, tarFilesCollections := bundle.TarBallComposer.Compose()
 	headersTarName, headersNames, err := bundle.writeHeaders(headers)
 	if err != nil {
@@ -483,45 +507,47 @@ func (bundle *Bundle) writeHeaders(headers []*tar.Header) (string, []string, err
 func (bundle *Bundle) getExpectedFileSize(filePath string, fileInfo os.FileInfo, wasInBase bool) (uint64, error) {
 	incrementBaseLsn := bundle.getIncrementBaseLsn()
 	isIncremented := bundle.checkIfIncremented(incrementBaseLsn, fileInfo, filePath, wasInBase)
-	if isIncremented {
-		bitmap, err := bundle.getDeltaBitmapFor(filePath)
-		if _, ok := err.(NoBitmapFoundError); ok {
-			// this file has changed after the start of backup and will be skipped
-			// so the expected size in tar is zero
-			return 0, nil
-		}
-		if err != nil {
-			return 0, errors.Wrapf(err, "getExpectedFileSize: failed to find corresponding bitmap '%s'\n", filePath)
-		}
-		if bitmap == nil {
-			// if there was no bundle bitmap set, do a full scan instead to calculate expected increment size
-			return bundle.scanExpectedIncrementSize(filePath, fileInfo, incrementBaseLsn)
-		}
-		incrementBlocksCount := bitmap.GetCardinality()
-		// expected header size = length(IncrementFileHeader) + sizeOf(fileSize) + sizeOf(diffBlockCount) + sizeOf(blockNo)*incrementBlocksCount
-		incrementHeaderSize := uint64(len(IncrementFileHeader)) + sizeofInt64 + sizeofInt32 + (incrementBlocksCount * sizeofInt32)
-		incrementPageDataSize := incrementBlocksCount * uint64(DatabasePageSize)
-		return incrementHeaderSize + incrementPageDataSize, nil
+	if !isIncremented {
+		return uint64(fileInfo.Size()), nil
 	}
-	return uint64(fileInfo.Size()), nil
-}
-
-func (bundle *Bundle) scanExpectedIncrementSize(path string, fileInfo os.FileInfo, incrementBaseLsn *uint64) (uint64, error) {
-	_, incrementSize, err := ReadIncrementalFile(path, fileInfo.Size(), *incrementBaseLsn, nil)
-	if os.IsNotExist(err) {
-		// File was deleted before opening, so set the expected size to zero
+	if !bundle.DeltaMapComplete {
+		err := bundle.scanDeltaMapFor(filePath, fileInfo.Size())
+		if err != nil {
+			return 0, err
+		}
+	}
+	bitmap, err := bundle.getDeltaBitmapFor(filePath)
+	if _, ok := err.(NoBitmapFoundError); ok {
+		// this file has changed after the start of backup and will be skipped
+		// so the expected size in tar is zero
 		return 0, nil
 	}
-	switch err.(type) {
-	case nil:
-		return uint64(incrementSize), nil
-	case InvalidBlockError:
-		// If failed to read as incremental file, set the expected size equal to page file size
-		tracelog.WarningLogger.Printf("scanExpectedIncrementSize: failed to read file '%s' as incremented\n.", path)
-		return uint64(fileInfo.Size()), nil
-	default:
-		return 0, errors.Wrapf(err, "scanExpectedIncrementSize: failed reading incremental file '%s'\n", path)
+	if err != nil {
+		return 0, errors.Wrapf(err, "getExpectedFileSize: failed to find corresponding bitmap '%s'\n", filePath)
 	}
+	incrementBlocksCount := bitmap.GetCardinality()
+	// expected header size = length(IncrementFileHeader) + sizeOf(fileSize) + sizeOf(diffBlockCount) + sizeOf(blockNo)*incrementBlocksCount
+	incrementHeaderSize := uint64(len(IncrementFileHeader)) + sizeofInt64 + sizeofInt32 + (incrementBlocksCount * sizeofInt32)
+	incrementPageDataSize := incrementBlocksCount * uint64(DatabasePageSize)
+	fmt.Printf("Increment: %s, expected size: %d, blocks: %d \n", filePath, incrementHeaderSize+incrementPageDataSize, incrementBlocksCount)
+	return incrementHeaderSize + incrementPageDataSize, nil
+}
+
+func (bundle *Bundle) scanDeltaMapFor(filePath string, fileSize int64) error {
+	locations, err := ReadIncrementLocations(filePath, fileSize, *bundle.getIncrementBaseLsn())
+	if err != nil {
+		return err
+	}
+	bundle.DeltaMapMutex.Lock()
+	defer bundle.DeltaMapMutex.Unlock()
+	if bundle.DeltaMap == nil {
+		bundle.DeltaMap = NewPagedFileDeltaMap()
+	}
+	if len(locations) == 0 {
+		return nil
+	}
+	bundle.DeltaMap.AddLocationsToDelta(locations)
+	return nil
 }
 
 // TODO : unit tests
@@ -563,11 +589,7 @@ func (bundle *Bundle) addToBundle(path string, info os.FileInfo) error {
 			bundle.skipFile(fileInfoHeader, info, updatesCount)
 			return nil
 		}
-		expectedFileSize, err := bundle.getExpectedFileSize(path, info, wasInBase)
-		if err != nil {
-			return err
-		}
-		bundle.TarBallComposer.AddFile(path, info, wasInBase, fileInfoHeader, updatesCount, expectedFileSize)
+		bundle.addToBundleQueue <- &AddToBundleTask{path: path, info: info, wasInBase: wasInBase, fileInfoHeader: fileInfoHeader, updatesCount: updatesCount}
 	} else {
 		bundle.TarBallComposer.AddHeader(fileInfoHeader)
 		bundle.getFiles().Store(fileInfoHeader.Name,
@@ -578,6 +600,19 @@ func (bundle *Bundle) addToBundle(path string, info os.FileInfo) error {
 	}
 
 	return nil
+}
+
+func (bundle *Bundle) addFileToBundle(tasks <-chan *AddToBundleTask) {
+	for task := range tasks {
+		expectedFileSize, err := bundle.getExpectedFileSize(task.path, task.info, task.wasInBase)
+		if err != nil {
+			panic(err)
+		}
+		bundle.TarBallComposer.AddFile(task.path, task.info, task.wasInBase,
+			task.fileInfoHeader, task.updatesCount, expectedFileSize)
+	}
+	fmt.Println("Closed worker...")
+	bundle.walkWaitGroup.Done()
 }
 
 // TODO : unit tests
@@ -702,6 +737,7 @@ func (bundle *Bundle) DownloadDeltaMap(folder storage.Folder, backupStartLSN uin
 		return err
 	}
 	bundle.DeltaMap = deltaMap
+	bundle.DeltaMapComplete = true
 	return nil
 }
 
@@ -766,7 +802,7 @@ func (bundle *Bundle) packFileIntoTar(cfi *ComposeFileInfo, tarBall TarBall) err
 	return nil
 }
 
-func (bundle *Bundle)checkIfIncremented(incrementBaseLsn *uint64, fileInfo os.FileInfo, filePath string, wasInBase bool) bool {
+func (bundle *Bundle) checkIfIncremented(incrementBaseLsn *uint64, fileInfo os.FileInfo, filePath string, wasInBase bool) bool {
 	return incrementBaseLsn != nil && (wasInBase || bundle.forceIncremental) && isPagedFile(fileInfo, filePath)
 }
 
