@@ -13,15 +13,15 @@ type Cleaner interface {
 }
 
 func CleanupPrefetchDirectories(walFileName string, location string, cleaner Cleaner) {
-	timelineId, logSegNo, err := ParseWALFilename(walFileName)
-	if err != nil {
-		tracelog.WarningLogger.Println("WAL-prefetch cleanup failed: ", err, " file: ", walFileName)
-		return
-	}
-	prefetchLocation, runningLocation, _, _ := getPrefetchLocations(location, walFileName)
-	for _, cleaningLocation := range []string{prefetchLocation, runningLocation} {
-		cleanupPrefetchDirectory(cleaningLocation, timelineId, logSegNo, cleaner)
-	}
+	//timelineId, logSegNo, err := ParseWALFilename(walFileName)
+	//if err != nil {
+	//	tracelog.WarningLogger.Println("WAL-prefetch cleanup failed: ", err, " file: ", walFileName)
+	//	return
+	//}
+	//prefetchLocation, runningLocation, _, _ := getPrefetchLocations(location, walFileName)
+	//for _, cleaningLocation := range []string{prefetchLocation, runningLocation} {
+	//	cleanupPrefetchDirectory(cleaningLocation, timelineId, logSegNo, cleaner)
+	//}
 }
 
 // TODO : unit tests

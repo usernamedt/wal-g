@@ -338,7 +338,7 @@ func TestWalk(t *testing.T) {
 		TarSizeThreshold: int64(10),
 		Files:            &sync.Map{},
 		TablespaceSpec:   internal.NewTablespaceSpec(data),
-		TarBallComposer:  internal.NewTarBallComposer(uint64(10),
+		TarBallComposer:  internal.NewRatingTarBallComposer(uint64(10),
 			internal.NewDefaultComposeRatingEvaluator(make(map[string]internal.BackupFileDescription))),
 	}
 	compressed := filepath.Join(filepath.Dir(data), "compressed")
@@ -352,7 +352,7 @@ func TestWalk(t *testing.T) {
 		t.Log(err)
 	}
 
-	bundle.StartQueue()
+	bundle.CreateAndStartQueue()
 	fmt.Println("Walking ...")
 	err = filepath.Walk(data, bundle.HandleWalkedFSObject)
 	if err != nil {
