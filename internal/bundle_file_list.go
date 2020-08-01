@@ -10,27 +10,27 @@ import (
 	"sync"
 )
 
-type SentinelFileList interface {
+type BundleFileList interface {
 	AddSkippedFile(tarHeader *tar.Header, fileInfo os.FileInfo)
 	AddFile(tarHeader *tar.Header, fileInfo os.FileInfo, isIncremented bool)
 	GetSentinelMap() *sync.Map
 }
 
-type RegularSentinelFileList struct {
+type RegularBundleFileList struct {
 	sync.Map
 }
 
-func (list *RegularSentinelFileList) AddSkippedFile(tarHeader *tar.Header, fileInfo os.FileInfo) {
+func (list *RegularBundleFileList) AddSkippedFile(tarHeader *tar.Header, fileInfo os.FileInfo) {
 	list.Store(tarHeader.Name,
 		BackupFileDescription{IsSkipped: true, IsIncremented: false, MTime: fileInfo.ModTime()})
 }
 
-func (list *RegularSentinelFileList) AddFile(tarHeader *tar.Header, fileInfo os.FileInfo, isIncremented bool) {
+func (list *RegularBundleFileList) AddFile(tarHeader *tar.Header, fileInfo os.FileInfo, isIncremented bool) {
 	list.Store(tarHeader.Name,
 		BackupFileDescription{IsSkipped: false, IsIncremented: isIncremented, MTime: fileInfo.ModTime()})
 }
 
-func (list *RegularSentinelFileList) GetSentinelMap() *sync.Map {
+func (list *RegularBundleFileList) GetSentinelMap() *sync.Map {
 	return &list.Map
 }
 
@@ -63,25 +63,7 @@ func (fl *StatisticsBundleFileList) GetSentinelMap() *sync.Map {
 
 type BundleFileStatistics map[walparser.RelFileNode]PgRelationStat
 
-func (relStat *BundleFileStatistics) getFileUpdateCount(filePath string) uint64 {
-	if relStat == nil {
-		return 0
-	}
-	relFileNode, err := GetRelFileNodeFrom(filePath)
-	if err != nil {
-		// TODO: try parse _vm, _fsm etc
-		// and assign the update count from corresponding tables
-		return 0
-	}
-	fileStat, ok := (*relStat)[*relFileNode]
-	if !ok {
-		return 0
-	}
-	return fileStat.deletedTuplesCount + fileStat.updatedTuplesCount + fileStat.insertedTuplesCount
-}
-
-
-func newBundleFileStatistics(conn *pgx.Conn) (BundleFileStatistics, error) {
+func NewBundleFileStatistics(conn *pgx.Conn) (BundleFileStatistics, error) {
 	databases, err := getDatabaseInfos(conn)
 	if err != nil {
 		return nil, errors.Wrap(err, "CollectStatistics: Failed to get db names.")
@@ -113,6 +95,23 @@ func newBundleFileStatistics(conn *pgx.Conn) (BundleFileStatistics, error) {
 		}
 	}
 	return result, nil
+}
+
+func (relStat *BundleFileStatistics) getFileUpdateCount(filePath string) uint64 {
+	if relStat == nil {
+		return 0
+	}
+	relFileNode, err := GetRelFileNodeFrom(filePath)
+	if err != nil {
+		// TODO: try parse _vm, _fsm etc
+		// and assign the update count from corresponding tables
+		return 0
+	}
+	fileStat, ok := (*relStat)[*relFileNode]
+	if !ok {
+		return 0
+	}
+	return fileStat.deletedTuplesCount + fileStat.updatedTuplesCount + fileStat.insertedTuplesCount
 }
 
 func getDatabaseInfos(conn *pgx.Conn) ([]PgDatabaseInfo, error) {

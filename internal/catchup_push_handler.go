@@ -25,6 +25,6 @@ func HandleCatchupPush(uploader *WalUploader, archiveDirectory string, fromLSN u
 		uploader,
 		archiveDirectory, utility.CatchupPath,
 		"", fakePreviousBackupSentinelDto,
-		false, true, 0,
+		false, true, 0, false,
 	)
 }

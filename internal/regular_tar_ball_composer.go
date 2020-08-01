@@ -10,14 +10,14 @@ type RegularTarBallComposer struct {
 	tarBallQueue *TarBallQueue
 	tarFilePacker *TarBallFilePacker
 	crypter crypto.Crypter
-	Files     *RegularSentinelFileList
+	Files     *RegularBundleFileList
 	tarFileSets map[string][]string
 }
 
 func NewRegularTarBallComposer(
 	incrementBaseLsn *uint64, deltaMap PagedFileDeltaMap, tarBallQueue *TarBallQueue,
 	crypter crypto.Crypter) *RegularTarBallComposer {
-	filesList := &RegularSentinelFileList{}
+	filesList := &RegularBundleFileList{}
 	return &RegularTarBallComposer{
 		tarBallQueue:  tarBallQueue,
 		tarFilePacker: newTarBallFilePacker(deltaMap, incrementBaseLsn, filesList),
@@ -65,6 +65,6 @@ func (c *RegularTarBallComposer) PackTarballs() (map[string][]string, error) {
 	return c.tarFileSets, nil
 }
 
-func (c *RegularTarBallComposer) GetFiles() SentinelFileList {
+func (c *RegularTarBallComposer) GetFiles() BundleFileList {
 	return c.Files
 }
