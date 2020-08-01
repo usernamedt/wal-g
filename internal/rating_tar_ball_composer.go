@@ -73,7 +73,7 @@ func NewRatingTarBallComposer(
 		deltaMapComplete = false
 		deltaMap = NewPagedFileDeltaMap()
 	}
-	fileStats, err := newBundleFileStatistics(conn)
+	fileStats, err := NewBundleFileStatistics(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (c *RatingTarBallComposer) PackTarballs() (map[string][]string, error) {
 	return tarFileSets, nil
 }
 
-func (c *RatingTarBallComposer) GetFiles() SentinelFileList {
+func (c *RatingTarBallComposer) GetFiles() BundleFileList {
 	return c.Files
 }
 

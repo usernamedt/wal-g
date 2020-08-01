@@ -15,10 +15,10 @@ type TarBallFilePacker struct {
 	timeline         uint32
 	deltaMap         PagedFileDeltaMap
 	incrementFromLsn *uint64
-	sentinelFileList SentinelFileList
+	sentinelFileList BundleFileList
 }
 
-func newTarBallFilePacker(deltaMap PagedFileDeltaMap, incrementFromLsn *uint64, bundleFileList SentinelFileList) *TarBallFilePacker {
+func newTarBallFilePacker(deltaMap PagedFileDeltaMap, incrementFromLsn *uint64, bundleFileList BundleFileList) *TarBallFilePacker {
 	return &TarBallFilePacker{
 		deltaMap:         deltaMap,
 		incrementFromLsn: incrementFromLsn,

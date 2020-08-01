@@ -123,8 +123,12 @@ func (bundle *Bundle) CreateAndStartQueue(tarBallMaker TarBallMaker) error {
 	return bundle.TarBallQueue.StartQueue()
 }
 
-func (bundle *Bundle) SetupComposer(conn *pgx.Conn) (err error) {
-	bundle.TarBallComposer, err = NewTarBallComposer(RegularComposer, bundle, conn)
+func (bundle *Bundle) SetupComposer(conn *pgx.Conn, useRatingComposer bool) (err error) {
+	composerType := RegularComposer
+	if useRatingComposer {
+		composerType = RatingComposer
+	}
+	bundle.TarBallComposer, err = NewTarBallComposer(composerType, bundle, conn)
 	return err
 }
 

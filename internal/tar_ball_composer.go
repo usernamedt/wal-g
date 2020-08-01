@@ -2,6 +2,7 @@ package internal
 
 import (
 	"archive/tar"
+	"fmt"
 	"github.com/jackc/pgx"
 	"os"
 )
@@ -11,7 +12,7 @@ type TarBallComposer interface {
 	AddHeader(header *tar.Header, fileInfo os.FileInfo)
 	SkipFile(tarHeader *tar.Header, fileInfo os.FileInfo)
 	PackTarballs() (map[string][]string, error)
-	GetFiles() SentinelFileList
+	GetFiles() BundleFileList
 }
 
 type ComposeFileInfo struct {
@@ -38,9 +39,11 @@ const (
 func NewTarBallComposer(composerType TarBallComposerType, bundle *Bundle, conn *pgx.Conn) (TarBallComposer, error) {
 	switch composerType {
 	case RegularComposer:
+		fmt.Println("Using regular composer...")
 		return NewRegularTarBallComposer(bundle.IncrementFromLsn, bundle.DeltaMap,
 			bundle.TarBallQueue, bundle.Crypter), nil
 	case RatingComposer:
+		fmt.Println("Using rating composer...")
 		return NewRatingTarBallComposer(
 			uint64(bundle.tarSizeThreshold),
 			NewDefaultComposeRatingEvaluator(bundle.IncrementFromFiles),
