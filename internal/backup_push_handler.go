@@ -90,8 +90,6 @@ func createAndPushBackup(
 	// Connect to postgres and start/finish a nonexclusive backup.
 	conn, err := Connect()
 	tracelog.ErrorLogger.FatalOnError(err)
-	err = bundle.CollectStatistics(conn)
-	tracelog.WarningLogger.PrintOnError(err)
 	backupName, backupStartLSN, pgVersion, dataDir, systemIdentifier, err := bundle.StartBackup(conn,
 		utility.CeilTimeUpToMicroseconds(time.Now()).String())
 	meta.DataDir = dataDir
@@ -106,7 +104,6 @@ func createAndPushBackup(
 			tracelog.ErrorLogger.FatalOnError(newBackupFromFuture(previousBackupName))
 		}
 		if previousBackupSentinelDto.SystemIdentifier != nil && systemIdentifier != nil && *systemIdentifier != *previousBackupSentinelDto.SystemIdentifier {
-
 			tracelog.ErrorLogger.FatalOnError(newBackupFromOtherBD())
 		}
 		if uploader.getUseWalDelta() {
@@ -120,10 +117,10 @@ func createAndPushBackup(
 		backupName = backupName + "_D_" + utility.StripWalFileName(previousBackupName)
 	}
 
-	bundle.TarBallMaker = NewStorageTarBallMaker(backupName, uploader.Uploader)
-
 	// Start a new tar bundle, walk the archiveDirectory and upload everything there.
-	err = bundle.StartQueue()
+	err = bundle.CreateAndStartQueue(NewStorageTarBallMaker(backupName, uploader.Uploader))
+	tracelog.ErrorLogger.FatalOnError(err)
+	err = bundle.SetupComposer(conn)
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.InfoLogger.Println("Walking ...")
 	err = filepath.Walk(archiveDirectory, bundle.HandleWalkedFSObject)
@@ -132,7 +129,7 @@ func createAndPushBackup(
 	tracelog.ErrorLogger.FatalOnError(err)
 	err = bundle.FinishQueue()
 	tracelog.ErrorLogger.FatalOnError(err)
-	uncompressedSize := bundle.TarBall.Size()
+	uncompressedSize := bundle.TarBallQueue.lastCreatedTarball.Size()
 	compressedSize := atomic.LoadInt64(uploader.tarSize)
 	err = bundle.UploadPgControl(uploader.Compressor.FileExtension())
 	tracelog.ErrorLogger.FatalOnError(err)
@@ -171,7 +168,7 @@ func createAndPushBackup(
 		currentBackupSentinelDto.IncrementCount = &incrementCount
 	}
 
-	currentBackupSentinelDto.setFiles(bundle.getFiles())
+	currentBackupSentinelDto.setFiles(bundle.GetFiles())
 	currentBackupSentinelDto.BackupFinishLSN = &finishLsn
 	currentBackupSentinelDto.UserData = GetSentinelUserData()
 	currentBackupSentinelDto.SystemIdentifier = systemIdentifier

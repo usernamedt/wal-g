@@ -36,7 +36,7 @@ func TestEmptyBundleQueue(t *testing.T) {
 
 	bundle.TarBallMaker = internal.NewStorageTarBallMaker("mockBackup", uploader)
 
-	err := bundle.StartQueue()
+	err := bundle.CreateAndStartQueue()
 	assert.NoError(t, err)
 
 	err = bundle.FinishQueue()
@@ -67,7 +67,7 @@ func queueTest(t *testing.T) {
 
 	// For tests there must be at least 3 workers
 
-	bundle.StartQueue()
+	bundle.CreateAndStartQueue()
 
 	a := bundle.Deque()
 	go func() {
