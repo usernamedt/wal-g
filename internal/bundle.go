@@ -86,7 +86,6 @@ type Bundle struct {
 	IncrementFromFiles BackupFileList
 	DeltaMap           PagedFileDeltaMap
 	TablespaceSpec     TablespaceSpec
-	RelationsStats     map[walparser.RelFileNode]PgRelationStat
 
 	forceIncremental bool
 	tarSizeThreshold int64
