@@ -3,6 +3,7 @@ package internal
 import (
 	"archive/tar"
 	"fmt"
+	"github.com/RoaringBitmap/roaring"
 	"github.com/spf13/viper"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/wal-g/internal/walparser"
@@ -142,6 +143,13 @@ func (bundle *Bundle) DownloadDeltaMap(folder storage.Folder, backupStartLSN uin
 	}
 	bundle.DeltaMap = deltaMap
 	return nil
+}
+
+func (bundle *Bundle) getDeltaBitmapFor(filePath string) (*roaring.Bitmap, error) {
+	if bundle.DeltaMap == nil {
+		return nil, nil
+	}
+	return bundle.DeltaMap.GetDeltaBitmapFor(filePath)
 }
 
 // GetIncrementBaseLsn returns LSN of previous backup
