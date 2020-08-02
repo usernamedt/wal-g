@@ -4,6 +4,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/wal-g/storages/storage"
+	"github.com/wal-g/tracelog"
+	"github.com/wal-g/wal-g/internal/compression"
+	"github.com/wal-g/wal-g/internal/ioextensions"
+	"github.com/wal-g/wal-g/utility"
 	"io"
 	"io/ioutil"
 	"os"
@@ -11,13 +17,6 @@ import (
 	"path"
 	"path/filepath"
 	"time"
-
-	"github.com/pkg/errors"
-	"github.com/wal-g/storages/storage"
-	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/internal/compression"
-	"github.com/wal-g/wal-g/internal/ioextensions"
-	"github.com/wal-g/wal-g/utility"
 )
 
 type InvalidWalFileMagicError struct {
@@ -51,7 +50,7 @@ func HandleWALFetch(folder storage.Folder, walFileName string, location string, 
 	folder = folder.GetSubFolder(utility.WalPath)
 	location = utility.ResolveSymlink(location)
 	if triggerPrefetch {
-		defer forkPrefetch(walFileName, location)
+		defer  forkPrefetch(walFileName, location)
 	}
 
 	_, _, running, prefetched := getPrefetchLocations(path.Dir(location), walFileName)

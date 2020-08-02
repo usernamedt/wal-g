@@ -75,6 +75,7 @@ func createAndPushBackup(
 	previousBackupSentinelDto BackupSentinelDto,
 	isPermanent, forceIncremental bool,
 	incrementCount int,
+	useRatingComposer bool,
 ) {
 	folder := uploader.UploadingFolder
 	uploader.UploadingFolder = folder.GetSubFolder(backupsFolder) // TODO: AB: this subfolder switch look ugly. I think typed storage folders could be better (i.e. interface BasebackupStorageFolder, WalStorageFolder etc)
@@ -104,7 +105,6 @@ func createAndPushBackup(
 			tracelog.ErrorLogger.FatalOnError(newBackupFromFuture(previousBackupName))
 		}
 		if previousBackupSentinelDto.SystemIdentifier != nil && systemIdentifier != nil && *systemIdentifier != *previousBackupSentinelDto.SystemIdentifier {
-
 			tracelog.ErrorLogger.FatalOnError(newBackupFromOtherBD())
 		}
 		if uploader.getUseWalDelta() {
@@ -118,24 +118,26 @@ func createAndPushBackup(
 		backupName = backupName + "_D_" + utility.StripWalFileName(previousBackupName)
 	}
 
-	bundle.TarBallMaker = NewStorageTarBallMaker(backupName, uploader.Uploader)
-
 	// Start a new tar bundle, walk the archiveDirectory and upload everything there.
-	err = bundle.StartQueue()
+	err = bundle.CreateAndStartQueue(NewStorageTarBallMaker(backupName, uploader.Uploader))
+	tracelog.ErrorLogger.FatalOnError(err)
+	err = bundle.SetupComposer(conn, useRatingComposer)
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.InfoLogger.Println("Walking ...")
 	err = filepath.Walk(archiveDirectory, bundle.HandleWalkedFSObject)
 	tracelog.ErrorLogger.FatalOnError(err)
+	tarFileSets, err := bundle.PackTarballs()
+	tracelog.ErrorLogger.FatalOnError(err)
 	err = bundle.FinishQueue()
 	tracelog.ErrorLogger.FatalOnError(err)
-	uncompressedSize := bundle.TarBall.Size()
+	uncompressedSize := bundle.TarBallQueue.lastCreatedTarball.Size()
 	compressedSize := atomic.LoadInt64(uploader.tarSize)
 	err = bundle.UploadPgControl(uploader.Compressor.FileExtension())
 	tracelog.ErrorLogger.FatalOnError(err)
 	// Stops backup and write/upload postgres `backup_label` and `tablespace_map` Files
-	finishLsn, err := bundle.uploadLabelFiles(conn)
+	labelFilesTarBallName, labelFilesList, finishLsn, err := bundle.uploadLabelFiles(conn)
 	tracelog.ErrorLogger.FatalOnError(err)
-
+	tarFileSets[labelFilesTarBallName] = append(tarFileSets[labelFilesTarBallName], labelFilesList...)
 	timelineChanged := bundle.checkTimelineChanged(conn)
 
 	// Wait for all uploads to finish.
@@ -167,12 +169,13 @@ func createAndPushBackup(
 		currentBackupSentinelDto.IncrementCount = &incrementCount
 	}
 
-	currentBackupSentinelDto.setFiles(bundle.getFiles())
+	currentBackupSentinelDto.setFiles(bundle.GetFiles())
 	currentBackupSentinelDto.BackupFinishLSN = &finishLsn
 	currentBackupSentinelDto.UserData = GetSentinelUserData()
 	currentBackupSentinelDto.SystemIdentifier = systemIdentifier
 	currentBackupSentinelDto.UncompressedSize = uncompressedSize
 	currentBackupSentinelDto.CompressedSize = compressedSize
+	currentBackupSentinelDto.TarFileSets = tarFileSets
 	// If pushing permanent delta backup, mark all previous backups permanent
 	// Do this before uploading current meta to ensure that backups are marked in increasing order
 	if isPermanent && currentBackupSentinelDto.IsIncremental() {
@@ -196,7 +199,7 @@ func createAndPushBackup(
 
 // TODO : unit tests
 // HandleBackupPush is invoked to perform a wal-g backup-push
-func HandleBackupPush(uploader *WalUploader, archiveDirectory string, isPermanent bool, isFullBackup bool) {
+func HandleBackupPush(uploader *WalUploader, archiveDirectory string, isPermanent bool, isFullBackup, useRatingComposer bool) {
 	archiveDirectory = utility.ResolveSymlink(archiveDirectory)
 	maxDeltas, fromFull := getDeltaConfig()
 	checkPgVersionAndPgControl(archiveDirectory)
@@ -243,7 +246,8 @@ func HandleBackupPush(uploader *WalUploader, archiveDirectory string, isPermanen
 		tracelog.InfoLogger.Println("Doing full backup.")
 	}
 
-	createAndPushBackup(uploader, archiveDirectory, utility.BaseBackupPath, previousBackupName, previousBackupSentinelDto, isPermanent, false, incrementCount)
+	createAndPushBackup(uploader, archiveDirectory, utility.BaseBackupPath, previousBackupName, previousBackupSentinelDto,
+		isPermanent, false, incrementCount, useRatingComposer)
 }
 
 // TODO : unit tests
