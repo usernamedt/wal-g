@@ -14,7 +14,9 @@ import (
 	"io/ioutil"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
+	"time"
 )
 
 type InvalidWalFileMagicError struct {
@@ -44,60 +46,60 @@ func (err ArchiveNonExistenceError) Error() string {
 // TODO : unit tests
 // HandleWALFetch is invoked to performa wal-g wal-fetch
 func HandleWALFetch(folder storage.Folder, walFileName string, location string, triggerPrefetch bool) {
-	//tracelog.DebugLogger.Printf("HandleWALFetch(folder, %s, %s, %v)\n", walFileName, location, triggerPrefetch)
-	//folder = folder.GetSubFolder(utility.WalPath)
-	//location = utility.ResolveSymlink(location)
-	//if triggerPrefetch {
-	//	defer  forkPrefetch(walFileName, location)
-	//}
-	//
-	//_, _, running, prefetched := getPrefetchLocations(path.Dir(location), walFileName)
-	//seenSize := int64(-1)
-	//
-	//for {
-	//	if stat, err := os.Stat(prefetched); err == nil {
-	//		if stat.Size() != int64(WalSegmentSize) {
-	//			tracelog.ErrorLogger.Println("WAL-G: Prefetch error: wrong file size of prefetched file ", stat.Size())
-	//			break
-	//		}
-	//
-	//		err = os.Rename(prefetched, location)
-	//		tracelog.ErrorLogger.FatalOnError(err)
-	//
-	//		err := checkWALFileMagic(location)
-	//		if err != nil {
-	//			tracelog.ErrorLogger.Println("Prefetched file contain errors", err)
-	//			_ = os.Remove(location)
-	//			break
-	//		}
-	//
-	//		return
-	//	} else if !os.IsNotExist(err) {
-	//		tracelog.ErrorLogger.FatalError(err)
-	//	}
-	//
-	//	// We have race condition here, if running is renamed here, but it's OK
-	//
-	//	if runStat, err := os.Stat(running); err == nil {
-	//		observedSize := runStat.Size() // If there is no progress in 50 ms - start downloading myself
-	//		if observedSize <= seenSize {
-	//			defer func() {
-	//				_ = os.Remove(running) // we try to clean up and ignore here any error
-	//				_ = os.Remove(prefetched)
-	//			}()
-	//			break
-	//		}
-	//		seenSize = observedSize
-	//	} else if os.IsNotExist(err) {
-	//		break // Normal startup path
-	//	} else {
-	//		break // Abnormal path. Permission denied etc. Yes, I know that previous 'else' can be eliminated.
-	//	}
-	//	time.Sleep(50 * time.Millisecond)
-	//}
-	//
-	//err := DownloadWALFileTo(folder, walFileName, location)
-	//tracelog.ErrorLogger.FatalOnError(err)
+	tracelog.DebugLogger.Printf("HandleWALFetch(folder, %s, %s, %v)\n", walFileName, location, triggerPrefetch)
+	folder = folder.GetSubFolder(utility.WalPath)
+	location = utility.ResolveSymlink(location)
+	if triggerPrefetch {
+		defer  forkPrefetch(walFileName, location)
+	}
+
+	_, _, running, prefetched := getPrefetchLocations(path.Dir(location), walFileName)
+	seenSize := int64(-1)
+
+	for {
+		if stat, err := os.Stat(prefetched); err == nil {
+			if stat.Size() != int64(WalSegmentSize) {
+				tracelog.ErrorLogger.Println("WAL-G: Prefetch error: wrong file size of prefetched file ", stat.Size())
+				break
+			}
+
+			err = os.Rename(prefetched, location)
+			tracelog.ErrorLogger.FatalOnError(err)
+
+			err := checkWALFileMagic(location)
+			if err != nil {
+				tracelog.ErrorLogger.Println("Prefetched file contain errors", err)
+				_ = os.Remove(location)
+				break
+			}
+
+			return
+		} else if !os.IsNotExist(err) {
+			tracelog.ErrorLogger.FatalError(err)
+		}
+
+		// We have race condition here, if running is renamed here, but it's OK
+
+		if runStat, err := os.Stat(running); err == nil {
+			observedSize := runStat.Size() // If there is no progress in 50 ms - start downloading myself
+			if observedSize <= seenSize {
+				defer func() {
+					_ = os.Remove(running) // we try to clean up and ignore here any error
+					_ = os.Remove(prefetched)
+				}()
+				break
+			}
+			seenSize = observedSize
+		} else if os.IsNotExist(err) {
+			break // Normal startup path
+		} else {
+			break // Abnormal path. Permission denied etc. Yes, I know that previous 'else' can be eliminated.
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	err := DownloadWALFileTo(folder, walFileName, location)
+	tracelog.ErrorLogger.FatalOnError(err)
 }
 
 // TODO : unit tests
