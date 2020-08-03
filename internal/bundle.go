@@ -34,6 +34,18 @@ type TarSizeError struct {
 	error
 }
 
+type PgDatabaseInfo struct {
+	name      string
+	oid       walparser.Oid
+	tblSpcOid walparser.Oid
+}
+
+type PgRelationStat struct {
+	insertedTuplesCount uint64
+	updatedTuplesCount  uint64
+	deletedTuplesCount  uint64
+}
+
 func newTarSizeError(packedFileSize, expectedSize int64) TarSizeError {
 	return TarSizeError{errors.Errorf("packed wrong numbers of bytes %d instead of %d", packedFileSize, expectedSize)}
 }

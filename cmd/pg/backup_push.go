@@ -11,8 +11,10 @@ const (
 	BackupPushShortDescription = "Makes backup and uploads it to storage"
 	PermanentFlag              = "permanent"
 	FullBackupFlag             = "full"
+	UseRatingComposer          = "rating-composer"
 	PermanentShorthand         = "p"
 	FullBackupShorthand        = "f"
+	UseRatingComposerShortHand = "r"
 )
 
 var (
@@ -24,11 +26,12 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			uploader, err := internal.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
-			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup)
+			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, useRatingComposer)
 		},
 	}
 	permanent  = false
 	fullBackup = false
+	useRatingComposer = false
 )
 
 func init() {
@@ -36,4 +39,5 @@ func init() {
 
 	backupPushCmd.Flags().BoolVarP(&permanent, PermanentFlag, PermanentShorthand, false, "Pushes permanent backup")
 	backupPushCmd.Flags().BoolVarP(&fullBackup, FullBackupFlag, FullBackupShorthand, false, "Make full backup-push")
+	backupPushCmd.Flags().BoolVarP(&useRatingComposer, UseRatingComposer, UseRatingComposerShortHand, false, "Use rating tar composer (beta)")
 }
