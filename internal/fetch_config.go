@@ -6,7 +6,7 @@ import (
 )
 
 func NewFetchConfig(backupName,dbDataDirectory string, folder storage.Folder, spec *TablespaceSpec,
-	filesToUnwrap map[string]bool) *FetchConfig {
+	filesToUnwrap map[string]bool, skipUnusedTarsAndFiles bool) *FetchConfig {
 	fetchConfig := &FetchConfig{
 		filesToUnwrap:          filesToUnwrap,
 		missingBlocks:          make(map[string]int64),
@@ -14,6 +14,7 @@ func NewFetchConfig(backupName,dbDataDirectory string, folder storage.Folder, sp
 		backupName:             backupName,
 		folder:                 folder,
 		dbDataDirectory:        dbDataDirectory,
+		skipUnusedTarsAndFiles: skipUnusedTarsAndFiles,
 	}
 	return fetchConfig
 }
@@ -26,12 +27,15 @@ type FetchConfig struct {
 	backupName             string
 	folder                 storage.Folder
 	dbDataDirectory        string
+	skipUnusedTarsAndFiles bool
 }
 
 func (fc *FetchConfig) UpdateFetchConfig(unwrapResult *UnwrapResult) {
-	fc.processCreatedPageFiles(unwrapResult.createdPageFiles)
-	fc.processWrittenIncrementFiles(unwrapResult.writtenIncrementFiles)
-	fc.excludeCompletedFiles(unwrapResult.completedFiles)
+	if fc.skipUnusedTarsAndFiles {
+		fc.processCreatedPageFiles(unwrapResult.createdPageFiles)
+		fc.processWrittenIncrementFiles(unwrapResult.writtenIncrementFiles)
+		fc.excludeCompletedFiles(unwrapResult.completedFiles)
+	}
 }
 
 func (fc *FetchConfig) excludeCompletedFile(filePath string) {
