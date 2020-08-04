@@ -100,6 +100,7 @@ type WalSegmentRunner struct {
 	walFolder          storage.Folder
 	walFolderFilenames map[string]bool
 	timelineSwitchMap  TimelineSwitchMap
+	cachedDecompressor compression.Decompressor
 }
 
 func NewWalSegmentRunner(
@@ -113,7 +114,7 @@ func NewWalSegmentRunner(
 		return nil, err
 	}
 	return &WalSegmentRunner{runBackwards, startWalSegment, walFolder,
-		fileNames, timelineSwitchMap}, nil
+		fileNames, timelineSwitchMap, nil}, nil
 }
 
 func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
@@ -126,7 +127,8 @@ func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
 		return nil, newReachedZeroSegmentError()
 	}
 	nextSegment := r.getNextSegment()
-	fileExists := checkFileExistsInStorage(nextSegment.GetFileName(), r.walFolderFilenames)
+	var fileExists bool
+	r.cachedDecompressor, fileExists = checkFileExistsInStorage(nextSegment.GetFileName(), r.walFolderFilenames, r.cachedDecompressor)
 	if !fileExists {
 		return nil, newWalSegmentNotFoundError(nextSegment.GetFileName())
 	}
@@ -225,17 +227,16 @@ func getHistoryFile(timeline uint32, folder storage.Folder) (io.ReadCloser, erro
 }
 
 // checkFileExistsInStorage checks that file with provided name exists in storage folder files
-func checkFileExistsInStorage(filename string, storageFiles map[string]bool) bool {
+func checkFileExistsInStorage(filename string, storageFiles map[string]bool, lastDecompressor compression.Decompressor) (compression.Decompressor, bool) {
 	// this code fragment is partially borrowed from DownloadAndDecompressStorageFile()
-	for _, decompressor := range putCachedDecompressorInFirstPlace(compression.Decompressors) {
+	for _, decompressor := range putCachedDecompressorInFirstPlaceFast(compression.Decompressors, lastDecompressor) {
 		_, exists := storageFiles[filename+"."+decompressor.FileExtension()]
 		if !exists {
 			continue
 		}
-		_ = SetLastDecompressor(decompressor)
-		return true
+		return decompressor, true
 	}
-	return false
+	return lastDecompressor, false
 }
 
 func getWalFolderFilenames(folder storage.Folder) (map[string]bool, error) {
@@ -248,4 +249,12 @@ func getWalFolderFilenames(folder storage.Folder) (map[string]bool, error) {
 		result[object.GetName()] = true
 	}
 	return result, nil
+}
+
+func putCachedDecompressorInFirstPlaceFast(decompressors []compression.Decompressor, lastDecompressor compression.Decompressor) []compression.Decompressor {
+	if lastDecompressor != nil && lastDecompressor != decompressors[0] {
+		return convertDecompressorList(decompressors, lastDecompressor)
+	}
+
+	return decompressors
 }
