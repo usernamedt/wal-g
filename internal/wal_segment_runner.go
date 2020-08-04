@@ -44,6 +44,18 @@ func (err WalSegmentNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
+type ReachedZeroSegmentError struct {
+	error
+}
+
+func newReachedZeroSegmentError() ReachedZeroSegmentError {
+	return ReachedZeroSegmentError{errors.Errorf("Reached segment with zero number.\n")}
+}
+
+func (err ReachedZeroSegmentError) Error() string {
+	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
+}
+
 // WalHistoryRecord represents entry in .history file
 type WalHistoryRecord struct {
 	timeline uint32
@@ -83,23 +95,25 @@ func (desc *WalSegmentDescription) GetFileName() string {
 // WalSegmentRunner is used for sequential iteration over WAL segments in the storage
 type WalSegmentRunner struct {
 	// runBackwards controls the direction of WalSegmentRunner
-	runBackwards      bool
-	currentWalSegment *WalSegmentDescription
-	folder            storage.Folder
-	timelineSwitchMap TimelineSwitchMap
+	runBackwards       bool
+	currentWalSegment  *WalSegmentDescription
+	walFolder          storage.Folder
+	walFolderFilenames map[string]bool
+	timelineSwitchMap  TimelineSwitchMap
 }
 
 func NewWalSegmentRunner(
 	runBackwards bool,
 	startWalSegment *WalSegmentDescription,
-	folder storage.Folder,
+	walFolder storage.Folder,
+	fileNames map[string]bool,
 ) (*WalSegmentRunner, error) {
-	timelineSwitchMap, err := createTimelineSwitchMap(startWalSegment.timeline, folder)
+	timelineSwitchMap, err := createTimelineSwitchMap(startWalSegment.timeline, walFolder)
 	if err != nil {
 		return nil, err
 	}
-	return &WalSegmentRunner{runBackwards, startWalSegment, folder,
-		timelineSwitchMap}, nil
+	return &WalSegmentRunner{runBackwards, startWalSegment, walFolder,
+		fileNames, timelineSwitchMap}, nil
 }
 
 func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
@@ -108,11 +122,11 @@ func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
 
 // MoveNext tries to get the next segment from storage
 func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
-	nextSegment := r.getNextSegment()
-	fileExists, err := checkFileExistsInStorage(nextSegment.GetFileName(), r.folder)
-	if err != nil {
-		return nil, err
+	if r.runBackwards && r.currentWalSegment.number <= 0 {
+		return nil, newReachedZeroSegmentError()
 	}
+	nextSegment := r.getNextSegment()
+	fileExists := checkFileExistsInStorage(nextSegment.GetFileName(), r.walFolderFilenames)
 	if !fileExists {
 		return nil, newWalSegmentNotFoundError(nextSegment.GetFileName())
 	}
@@ -210,19 +224,28 @@ func getHistoryFile(timeline uint32, folder storage.Folder) (io.ReadCloser, erro
 	return reader, nil
 }
 
-// checkFileExistsInStorage checks that file with provided name exists in storage folder
-func checkFileExistsInStorage(filename string, folder storage.Folder) (bool, error) {
+// checkFileExistsInStorage checks that file with provided name exists in storage folder files
+func checkFileExistsInStorage(filename string, storageFiles map[string]bool) bool {
 	// this code fragment is partially borrowed from DownloadAndDecompressStorageFile()
 	for _, decompressor := range putCachedDecompressorInFirstPlace(compression.Decompressors) {
-		_, exists, err := TryDownloadFile(folder, filename+"."+decompressor.FileExtension())
-		if err != nil {
-			return false, err
-		}
+		_, exists := storageFiles[filename+"."+decompressor.FileExtension()]
 		if !exists {
 			continue
 		}
 		_ = SetLastDecompressor(decompressor)
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
+}
+
+func getWalFolderFilenames(folder storage.Folder) (map[string]bool, error) {
+	objects, _, err := folder.ListFolder()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool, len(objects))
+	for _, object := range objects {
+		result[object.GetName()] = true
+	}
+	return result, nil
 }
