@@ -7,6 +7,8 @@ import (
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
+	"os"
+	"runtime/pprof"
 )
 
 type SequenceTraverseError struct {
@@ -46,6 +48,9 @@ func HandleWalVerify(folder storage.Folder) {
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.InfoLogger.Println("Cluster current WAL segment: " + currentSegment.GetFileName())
 	tracelog.InfoLogger.Println("Started WAL segment sequence walk...")
+	cpuProfile, _ := os.Create("cpuprofile")
+	memProfile, _ := os.Create("memprofile")
+	pprof.StartCPUProfile(cpuProfile)
 
 	// TODO: print available backups in the resulting WAL segments range
 	// We can do PITR starting from the backup in range [firstSegment, lastSegment]
@@ -59,6 +64,8 @@ func HandleWalVerify(folder storage.Folder) {
 		}
 		tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk", err)
 	}
+	pprof.StopCPUProfile()
+	pprof.WriteHeapProfile(memProfile)
 }
 
 func ProcessSinglePitrSequence(runner *WalSegmentRunner, maxUploadSequenceSize int) (*WalSegmentDescription, *WalSegmentDescription, error) {
