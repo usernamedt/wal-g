@@ -44,6 +44,7 @@ func (err WalSegmentNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
+// WalHistoryRecord represents entry in .history file
 type WalHistoryRecord struct {
 	timeline uint32
 	lsn      uint64
@@ -67,10 +68,11 @@ func newWalHistoryRecordFromString(row string) (*WalHistoryRecord, error) {
 	return &WalHistoryRecord{timeline: uint32(timeline), lsn: lsn, comment: comment}, nil
 }
 
+// TimelineSwitchMap represents .history file
 type TimelineSwitchMap map[WalSegmentNo]*WalHistoryRecord
 
 type WalSegmentDescription struct {
-	number WalSegmentNo
+	number   WalSegmentNo
 	timeline uint32
 }
 
@@ -78,35 +80,36 @@ func (desc *WalSegmentDescription) GetFileName() string {
 	return desc.number.getFilename(desc.timeline)
 }
 
+// WalSegmentRunner is used for sequential iteration over WAL segments in the storage
 type WalSegmentRunner struct {
-	// runBackward controls the direction of WalSegmentRunner
-	runBackward       bool
+	// runBackwards controls the direction of WalSegmentRunner
+	runBackwards      bool
 	currentWalSegment *WalSegmentDescription
 	folder            storage.Folder
 	timelineSwitchMap TimelineSwitchMap
 }
 
-func newWalSegmentRunner(
-	runBackward bool,
+func NewWalSegmentRunner(
+	runBackwards bool,
 	startWalSegment *WalSegmentDescription,
 	folder storage.Folder,
-)(*WalSegmentRunner, error) {
+) (*WalSegmentRunner, error) {
 	timelineSwitchMap, err := createTimelineSwitchMap(startWalSegment.timeline, folder)
 	if err != nil {
 		return nil, err
 	}
-	return &WalSegmentRunner{runBackward,startWalSegment,folder,
+	return &WalSegmentRunner{runBackwards, startWalSegment, folder,
 		timelineSwitchMap}, nil
 }
 
-func (r *WalSegmentRunner) GetCurrentWalSegment() *WalSegmentDescription {
-	result := *r.currentWalSegment
-	return &result
+func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
+	return &*r.currentWalSegment
 }
 
+// MoveNext tries to get the next segment from storage
 func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
 	nextSegment := r.getNextSegment()
-	fileExists, err := checkWalSegmentExistsInStorage(nextSegment.GetFileName(), r.folder)
+	fileExists, err := checkFileExistsInStorage(nextSegment.GetFileName(), r.folder)
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +118,14 @@ func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
 	}
 	r.currentWalSegment = nextSegment
 	// return separate struct so it won't change after MoveNext() call
-	returnWalSegment := *r.currentWalSegment
-	return &returnWalSegment, nil
+	return r.GetCurrent(), nil
 }
 
+// getNextSegment calculates the next segment
 func (r *WalSegmentRunner) getNextSegment() *WalSegmentDescription {
 	var nextSegmentNo WalSegmentNo
 	nextTimeline := r.currentWalSegment.timeline
-	if r.runBackward {
+	if r.runBackwards {
 		if record, ok := r.getTimelineSwitchRecord(r.currentWalSegment.number); ok {
 			// switch timeline if current WAL segment number found in .history record
 			nextTimeline = record.timeline
@@ -134,11 +137,13 @@ func (r *WalSegmentRunner) getNextSegment() *WalSegmentDescription {
 	return &WalSegmentDescription{timeline: nextTimeline, number: nextSegmentNo}
 }
 
-func (r *WalSegmentRunner) ForceSwitchToNextSegment() {
+// ForceSwitchToNext do a force-switch to the next segment without accessing storage
+func (r *WalSegmentRunner) ForceSwitchToNext() {
 	nextSegment := r.getNextSegment()
 	r.currentWalSegment = nextSegment
 }
 
+// getTimelineSwitchRecord checks if there is a record in .history file for provided wal segment number
 func (r *WalSegmentRunner) getTimelineSwitchRecord(walSegmentNo WalSegmentNo) (*WalHistoryRecord, bool) {
 	if r.timelineSwitchMap == nil {
 		return nil, false
@@ -147,6 +152,7 @@ func (r *WalSegmentRunner) getTimelineSwitchRecord(walSegmentNo WalSegmentNo) (*
 	return record, ok
 }
 
+// createTimelineSwitchMap tries to fetch and parse .history file
 func createTimelineSwitchMap(startTimeline uint32, folder storage.Folder) (TimelineSwitchMap, error) {
 	historyReadCloser, err := getHistoryFile(startTimeline, folder)
 	if _, ok := err.(HistoryFileNotFoundError); ok {
@@ -204,7 +210,8 @@ func getHistoryFile(timeline uint32, folder storage.Folder) (io.ReadCloser, erro
 	return reader, nil
 }
 
-func checkWalSegmentExistsInStorage(filename string, folder storage.Folder) (bool, error) {
+// checkFileExistsInStorage checks that file with provided name exists in storage folder
+func checkFileExistsInStorage(filename string, folder storage.Folder) (bool, error) {
 	// this code fragment is partially borrowed from DownloadAndDecompressStorageFile()
 	for _, decompressor := range putCachedDecompressorInFirstPlace(compression.Decompressors) {
 		_, exists, err := TryDownloadFile(folder, filename+"."+decompressor.FileExtension())
