@@ -79,10 +79,11 @@ func (desc *WalSegmentDescription) GetFileName() string {
 }
 
 type WalSegmentRunner struct {
+	// runBackward controls the direction of WalSegmentRunner
 	runBackward       bool
 	currentWalSegment *WalSegmentDescription
 	folder            storage.Folder
-	timelineSwitchMap map[WalSegmentNo]*WalHistoryRecord
+	timelineSwitchMap TimelineSwitchMap
 }
 
 func newWalSegmentRunner(
@@ -103,7 +104,7 @@ func (r *WalSegmentRunner) GetCurrentWalSegment() *WalSegmentDescription {
 	return &result
 }
 
-func (r *WalSegmentRunner) GetNext() (*WalSegmentDescription, error) {
+func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
 	nextSegment := r.getNextSegment()
 	fileExists, err := checkWalSegmentExistsInStorage(nextSegment.GetFileName(), r.folder)
 	if err != nil {
@@ -113,7 +114,7 @@ func (r *WalSegmentRunner) GetNext() (*WalSegmentDescription, error) {
 		return nil, newWalSegmentNotFoundError(nextSegment.GetFileName())
 	}
 	r.currentWalSegment = nextSegment
-	// return separate struct so it won't change after GetNext() call
+	// return separate struct so it won't change after MoveNext() call
 	returnWalSegment := *r.currentWalSegment
 	return &returnWalSegment, nil
 }

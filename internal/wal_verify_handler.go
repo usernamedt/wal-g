@@ -92,7 +92,7 @@ func traverseUploadingSegments(runner *WalSegmentRunner, maxSegmentsToSkip int) 
 	lastExistingSegment := runner.GetCurrentWalSegment()
 	previousSegmentExists := true
 	for i := 0; i < maxSegmentsToSkip; i++ {
-		nextSegment, err := runner.GetNext()
+		nextSegment, err := runner.MoveNext()
 		// WalSegmentNotFoundError means we reached the end of continuous WAL segments sequence
 		if _, ok := err.(WalSegmentNotFoundError); ok {
 			runner.ForceSwitchToNextSegment()
@@ -121,7 +121,7 @@ func traverseUploadingSegments(runner *WalSegmentRunner, maxSegmentsToSkip int) 
 
 func runToFirstStorageSegment(runner *WalSegmentRunner) error {
 	for runner.currentWalSegment.number > 0 {
-		nextSegment, err := runner.GetNext()
+		nextSegment, err := runner.MoveNext()
 		// WalSegmentNotFoundError means we reached the end of continuous WAL segments sequence
 		if _, ok := err.(WalSegmentNotFoundError); ok {
 			return nil
@@ -137,7 +137,7 @@ func runToFirstStorageSegment(runner *WalSegmentRunner) error {
 
 func runToLastStorageSegment(runner *WalSegmentRunner) error {
 	for runner.currentWalSegment.number > 0 {
-		_, err := runner.GetNext()
+		_, err := runner.MoveNext()
 		if _, ok := err.(WalSegmentNotFoundError); ok {
 			// force switch to previous WAL segment
 			tracelog.WarningLogger.Println("runToLastStorageSegment: Skipped segment " +
