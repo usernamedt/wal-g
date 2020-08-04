@@ -122,7 +122,7 @@ func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
 
 // MoveNext tries to get the next segment from storage
 func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
-	if r.runBackwards && r.currentWalSegment.number <= 0 {
+	if r.runBackwards && r.currentWalSegment.number <= 1 {
 		return nil, newReachedZeroSegmentError()
 	}
 	nextSegment := r.getNextSegment()
