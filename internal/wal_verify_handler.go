@@ -7,7 +7,14 @@ import (
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
+	"regexp"
 )
+
+var walSegmentNameRegexp *regexp.Regexp
+
+func init() {
+	walSegmentNameRegexp = regexp.MustCompile("^[0-9A-F]{24}$")
+}
 
 type LastSegmentNotFoundError struct {
 	error
@@ -21,41 +28,62 @@ func (err LastSegmentNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
-// HandleWalVerify queries the current cluster WAL segment and timeline
-// and travels through WAL segments in storage in historical order (starting from that segment)
-// to find any missing WAL segments that could potentially fail the PITR procedure
-func HandleWalVerify(folder storage.Folder) {
-	folder = folder.GetSubFolder(utility.WalPath)
+// ParseStartWalSegment() gets start WAL segment from input string
+func ParseStartWalSegment(startWalSegmentInput string) *WalSegmentDescription {
+	matchResult := walSegmentNameRegexp.FindStringSubmatch(startWalSegmentInput)
+	if matchResult == nil {
+		tracelog.ErrorLogger.Fatalf("Provided WAL segment name is incorrect %v", startWalSegmentInput)
+	}
+	timeline, segmentNo, err := ParseWALFilename(matchResult[0])
+	tracelog.ErrorLogger.FatalfOnError("Failed to get timeline and WAL segment number " +
+		"from provided WAL segment name %v", err)
+	return &WalSegmentDescription{timeline: timeline, number: WalSegmentNo(segmentNo)}
+}
+
+// QueryCurrentWalSegment() gets start WAL segment from Postgres cluster
+func QueryCurrentWalSegment() *WalSegmentDescription {
 	conn, err := Connect()
-	tracelog.ErrorLogger.FatalfOnError("Failed to establish a connection to Postgres cluster", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to establish a connection to Postgres cluster %v", err)
+
 	queryRunner, err := newPgQueryRunner(conn)
-	tracelog.ErrorLogger.FatalfOnError("Failed to initialize PgQueryRunner", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to initialize PgQueryRunner %v", err)
 
 	currentSegmentNo, err := getCurrentWalSegmentNo(queryRunner)
-	tracelog.ErrorLogger.FatalfOnError("Failed to get current WAL segment number", err)
-	currentTimeline, err := getCurrentTimeline(conn)
-	tracelog.ErrorLogger.FatalfOnError("Failed to get current timeline", err)
-	// currentSegment is the current WAL segment of the cluster
-	currentSegment := &WalSegmentDescription{timeline: currentTimeline, number: currentSegmentNo}
+	tracelog.ErrorLogger.FatalfOnError("Failed to get current WAL segment number %v", err)
 
-	fileNames, err := getFolderFilenames(folder)
-	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames", err)
-	walSegmentRunner, err := NewWalSegmentRunner(true, currentSegment, folder, fileNames)
-	tracelog.ErrorLogger.FatalfOnError("Failed to initialize WAL segment runner", err)
+	currentTimeline, err := getCurrentTimeline(conn)
+	tracelog.ErrorLogger.FatalfOnError("Failed to get current timeline %v", err)
+
+	err = conn.Close()
+	tracelog.WarningLogger.PrintOnError(err)
+
+	// currentSegment is the current WAL segment of the cluster
+	return &WalSegmentDescription{timeline: currentTimeline, number: currentSegmentNo}
+}
+
+// HandleWalVerify queries the current cluster WAL segment and timeline
+// and travels through WAL segments in storage in reversed chronological order (starting from that segment)
+// to find any missing WAL segments that could potentially fail the PITR procedure
+func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescription) {
+	walFolder := rootFolder.GetSubFolder(utility.WalPath)
+	fileNames, err := getFolderFilenames(walFolder)
+	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
+
+	walSegmentRunner, err := NewWalSegmentRunner(true, startWalSegment, walFolder, fileNames)
+	tracelog.ErrorLogger.FatalfOnError("Failed to initialize WAL segment runner %v", err)
 
 	// maxConcurrency is needed to determine max amount of missing WAL segments
 	// after the last found WAL segment which can be skipped ("uploading" segment sequence size)
 	maxConcurrency, err := getMaxUploadConcurrency()
 	tracelog.ErrorLogger.FatalOnError(err)
-	tracelog.InfoLogger.Println("Cluster current WAL segment: " + currentSegment.GetFileName())
-	tracelog.InfoLogger.Println("Started WAL segment sequence walk...")
 
+	tracelog.InfoLogger.Printf("Start WAL segment: %s", startWalSegment.GetFileName())
 	sequenceStart, sequenceEnd, err := FindNextContinuousSequence(walSegmentRunner, maxConcurrency)
 	if _, ok := err.(ReachedZeroSegmentError); ok {
 		tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
 		return
 	}
-	tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk", err)
+	tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk %v", err)
 	PrintSequenceInfo(sequenceStart, sequenceEnd)
 
 	for {
@@ -64,7 +92,7 @@ func HandleWalVerify(folder storage.Folder) {
 			tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
 			break
 		}
-		tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk", err)
+		tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk %v", err)
 		PrintSequenceInfo(sequenceStart, sequenceEnd)
 	}
 }
