@@ -212,9 +212,13 @@ func convertDecompressorList(decompressors []compression.Decompressor,
 
 func putCachedDecompressorInFirstPlace(decompressors []compression.Decompressor) []compression.Decompressor {
 	lastDecompressor, _ := GetLastDecompressor()
+	return putDecompressorInFirstPlace(lastDecompressor, decompressors)
+}
 
-	if lastDecompressor != nil && lastDecompressor != decompressors[0] {
-		return convertDecompressorList(decompressors, lastDecompressor)
+func putDecompressorInFirstPlace(decompressor compression.Decompressor,
+	decompressors []compression.Decompressor) []compression.Decompressor {
+	if decompressor != nil && decompressor != decompressors[0] {
+		return convertDecompressorList(decompressors, decompressor)
 	}
 
 	return decompressors

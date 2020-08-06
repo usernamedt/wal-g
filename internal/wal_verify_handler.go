@@ -7,26 +7,27 @@ import (
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
-	"os"
-	"runtime/pprof"
 )
 
-type SequenceTraverseError struct {
+type LastSegmentNotFoundError struct {
 	error
 }
 
-func newSequenceTraverseError() SequenceTraverseError {
-	return SequenceTraverseError{errors.Errorf("Could not reach the last element of skippable segment sequence.\n")}
+func newLastSegmentNotFoundError() LastSegmentNotFoundError {
+	return LastSegmentNotFoundError{errors.Errorf("Could not reach the last element of segment sequence.\n")}
 }
 
-func (err SequenceTraverseError) Error() string {
+func (err LastSegmentNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
+// HandleWalVerify queries the current cluster WAL segment and timeline
+// and travels through WAL segments in storage in historical order (starting from that segment)
+// to find any missing WAL segments that could potentially fail the PITR procedure
 func HandleWalVerify(folder storage.Folder) {
 	folder = folder.GetSubFolder(utility.WalPath)
 	conn, err := Connect()
-	tracelog.ErrorLogger.FatalfOnError("Failed to establish a connection to postgres", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to establish a connection to Postgres cluster", err)
 	queryRunner, err := newPgQueryRunner(conn)
 	tracelog.ErrorLogger.FatalfOnError("Failed to initialize PgQueryRunner", err)
 
@@ -37,7 +38,7 @@ func HandleWalVerify(folder storage.Folder) {
 	// currentSegment is the current WAL segment of the cluster
 	currentSegment := &WalSegmentDescription{timeline: currentTimeline, number: currentSegmentNo}
 
-	fileNames, err := getWalFolderFilenames(folder)
+	fileNames, err := getFolderFilenames(folder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames", err)
 	walSegmentRunner, err := NewWalSegmentRunner(true, currentSegment, folder, fileNames)
 	tracelog.ErrorLogger.FatalfOnError("Failed to initialize WAL segment runner", err)
@@ -48,56 +49,49 @@ func HandleWalVerify(folder storage.Folder) {
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.InfoLogger.Println("Cluster current WAL segment: " + currentSegment.GetFileName())
 	tracelog.InfoLogger.Println("Started WAL segment sequence walk...")
-	cpuProfile, _ := os.Create("cpuprofile")
-	memProfile, _ := os.Create("memprofile")
-	pprof.StartCPUProfile(cpuProfile)
 
-	// TODO: print available backups in the resulting WAL segments range
-	// We can do PITR starting from the backup in range [firstSegment, lastSegment]
-	_, _, err = ProcessSinglePitrSequence(walSegmentRunner, maxConcurrency)
+	sequenceStart, sequenceEnd, err := FindNextContinuousSequence(walSegmentRunner, maxConcurrency)
+	if _, ok := err.(ReachedZeroSegmentError); ok {
+		tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
+		return
+	}
 	tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk", err)
+	PrintSequenceInfo(sequenceStart, sequenceEnd)
+
 	for {
-		_, _, err = ProcessSinglePitrSequence(walSegmentRunner, 0)
+		_, _, err = FindNextContinuousSequence(walSegmentRunner, 0)
 		if _, ok := err.(ReachedZeroSegmentError); ok {
 			tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
 			break
 		}
 		tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk", err)
+		PrintSequenceInfo(sequenceStart, sequenceEnd)
 	}
-	pprof.StopCPUProfile()
-	pprof.WriteHeapProfile(memProfile)
 }
 
-func ProcessSinglePitrSequence(runner *WalSegmentRunner, maxUploadSequenceSize int) (*WalSegmentDescription, *WalSegmentDescription, error) {
-	// [firstSegment, lastSegment] is the continuous WAL segment range with no missing segments
-	firstSegment, lastSegment, err := GetPitrRange(runner, maxUploadSequenceSize)
-	if err != nil {
-		return nil, nil, err
-	}
+func PrintSequenceInfo(start, end *WalSegmentDescription) {
+	tracelog.InfoLogger.Println("WAL segments continuous sequence START: " + start.GetFileName())
+	tracelog.InfoLogger.Println("WAL segments continuous sequence END: " + end.GetFileName())
 
-	tracelog.InfoLogger.Println("WAL segments continuous sequence START: " + lastSegment.GetFileName())
-	tracelog.InfoLogger.Println("WAL segments continuous sequence END: " + firstSegment.GetFileName())
-	return nil, nil, err
+	// TODO: print available backups in the resulting WAL segments range
+	// We can do PITR starting from the backup in range [start, end]
 }
 
-func GetPitrRange(runner *WalSegmentRunner, uploadingSegmentRangeSize int) (*WalSegmentDescription, *WalSegmentDescription, error) {
+func FindNextContinuousSequence(runner *WalSegmentRunner, uploadingSegmentRangeSize int) (*WalSegmentDescription, *WalSegmentDescription, error) {
 	// Run to the latest WAL segment available in storage
 	err := runToLastStorageSegment(runner)
 	if err != nil {
 		return nil, nil, err
 	}
-	rangeStart := runner.GetCurrent()
+	startSegment := runner.GetCurrent()
 
-	// "Uploading" segment sequence may contain missing segments because they are still being uploaded.
-	// Last element of "uploading" segments sequence should always exist and can not be skipped.
-	// New rangeStart might be chosen if there is some skipped segments after current rangeStart
-	// because we need a continuous sequence for PITR.
-	// lastAvailableSegment only used in case of error
-	rangeStart, lastAvailableSegment, err := traverseUploadingSegments(runner, uploadingSegmentRangeSize)
-	if _, ok := err.(SequenceTraverseError); ok {
-		// SequenceTraverseError means that the last segment in uploading WAL segments sequence
-		// is not available in storage so we need to return range [rangeStart, lastAvailableSegment]
-		return rangeStart, lastAvailableSegment, nil
+	// New startSegment might be chosen if there is some skipped segments after current startSegment
+	// because we need a continuous sequence
+	startSegment, lastExistingSegment, err := traverseUploadingSegments(runner, uploadingSegmentRangeSize)
+	if _, ok := err.(LastSegmentNotFoundError); ok {
+		// LastSegmentNotFoundError means that the last segment in uploading WAL segments sequence
+		// is not available in storage so we need to return range [startSegment, lastExistingSegment]
+		return startSegment, lastExistingSegment, nil
 	}
 	if err != nil {
 		return nil, nil, err
@@ -107,48 +101,55 @@ func GetPitrRange(runner *WalSegmentRunner, uploadingSegmentRangeSize int) (*Wal
 	if err != nil {
 		return nil, nil, err
 	}
-	rangeEnd := runner.GetCurrent()
-	return rangeEnd, rangeStart, nil
+	endSegment := runner.GetCurrent()
+	return endSegment, startSegment, nil
 }
 
-func traverseUploadingSegments(runner *WalSegmentRunner, maxSegmentsToSkip int) (*WalSegmentDescription, *WalSegmentDescription, error) {
+// traverseUploadingSegments is used to walk through WAL segments sequence sections that is probably
+// being uploaded. It may contain missing segments because they are still being uploaded.
+// Last element of "uploading" segments sequence should always exist and can not be skipped.
+func traverseUploadingSegments(runner *WalSegmentRunner, uploadingSequenceRange int) (*WalSegmentDescription, *WalSegmentDescription, error) {
 	firstExistingSegment := runner.GetCurrent()
 	lastExistingSegment := runner.GetCurrent()
 	previousSegmentExists := true
-	for i := 0; i < maxSegmentsToSkip; i++ {
-		nextSegment, err := runner.MoveNext()
+	for i := 0; i < uploadingSequenceRange; i++ {
+		currentSegment, err := runner.MoveNext()
 		if err != nil {
 			switch err := err.(type) {
 			case WalSegmentNotFoundError:
 				// WalSegmentNotFoundError means we reached the end of continuous WAL segments sequence
-				runner.ForceSwitchToNext()
+				runner.ForceMoveNext()
 				previousSegmentExists = false
-				tracelog.WarningLogger.Println("traverseUploadingSegments: Skipped missing segment " +
+				tracelog.WarningLogger.Printf("Skipped missing segment %s, probably still uploading\n",
 					runner.GetCurrent().GetFileName())
 				continue
 			case ReachedZeroSegmentError:
 				// Can't continue because reached segment with zero number
 				// so throw an error and return continuous segments sequence
-				return firstExistingSegment, lastExistingSegment, newSequenceTraverseError()
+				return firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
 			default:
 				return nil, nil, err
 			}
 		}
 		if !previousSegmentExists {
-			firstExistingSegment = nextSegment
+			// if previous segment was skipped we should change firstExistingSegment to current
+			// because we need continuous segment sequence
+			firstExistingSegment = currentSegment
 			previousSegmentExists = true
 		}
-		lastExistingSegment = nextSegment
-		tracelog.DebugLogger.Println("Walked segment " + nextSegment.GetFileName())
+		lastExistingSegment = currentSegment
+		tracelog.DebugLogger.Println("Walked segment " + currentSegment.GetFileName())
 	}
 	if !previousSegmentExists {
 		// Last segment needs to exist and can't be skipped
 		// so we should throw an error and return continuous segments sequence
-		return firstExistingSegment, lastExistingSegment, newSequenceTraverseError()
+		return firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
 	}
 	return firstExistingSegment, lastExistingSegment, nil
 }
 
+// runToFirstStorageSegment travels the continuous WAL segments section and exits
+// if missing segment or segment with zero number encountered.
 func runToFirstStorageSegment(runner *WalSegmentRunner) error {
 	for {
 		nextSegment, err := runner.MoveNext()
@@ -169,13 +170,14 @@ func runToFirstStorageSegment(runner *WalSegmentRunner) error {
 	}
 }
 
+// runToLastStorageSegment should find the first non-missing segment and exit
 func runToLastStorageSegment(runner *WalSegmentRunner) error {
 	for {
 		if _, err := runner.MoveNext(); err != nil {
 			if _, ok := err.(WalSegmentNotFoundError); ok {
-				// force switch to the previous WAL segment
-				runner.ForceSwitchToNext()
-				tracelog.WarningLogger.Println("runToLastStorageSegment: Skipped missing segment " +
+				// force switch to the next WAL segment
+				runner.ForceMoveNext()
+				tracelog.WarningLogger.Printf("Skipped missing segment %s\n",
 					runner.currentWalSegment.GetFileName())
 				continue
 			}
@@ -185,6 +187,7 @@ func runToLastStorageSegment(runner *WalSegmentRunner) error {
 	}
 }
 
+// get the current wal segment number of the cluster
 func getCurrentWalSegmentNo(queryRunner *PgQueryRunner) (WalSegmentNo, error) {
 	lsnStr, err := queryRunner.getCurrentLsn()
 	if err != nil {
@@ -197,6 +200,7 @@ func getCurrentWalSegmentNo(queryRunner *PgQueryRunner) (WalSegmentNo, error) {
 	return newWalSegmentNo(lsn - 1), nil
 }
 
+// get the current timeline of the cluster
 func getCurrentTimeline(conn *pgx.Conn) (uint32, error) {
 	timeline, err := readTimeline(conn)
 	if err != nil {
