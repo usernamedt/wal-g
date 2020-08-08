@@ -23,9 +23,6 @@ func (err HistoryFileNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
-// TimelineHistoryMap represents .history file
-type TimelineHistoryMap map[WalSegmentNo]*TimelineHistoryRecord
-
 // TimelineHistoryRecord represents entry in .history file
 type TimelineHistoryRecord struct {
 	timeline uint32
@@ -51,13 +48,23 @@ func newHistoryRecordFromString(row string) (*TimelineHistoryRecord, error) {
 }
 
 // createTimelineHistoryMap tries to fetch and parse .history file
-func createTimelineHistoryMap(startTimeline uint32, folder storage.Folder) (TimelineHistoryMap, error) {
-	timeLineHistoryMap := make(TimelineHistoryMap, 0)
-	historyReadCloser, err := getHistoryFileFromStorage(startTimeline, folder)
+func createTimelineHistoryMap(startTimeline uint32, folder storage.Folder) (map[WalSegmentNo]*TimelineHistoryRecord, error) {
+	timeLineHistoryMap := make(map[WalSegmentNo]*TimelineHistoryRecord, 0)
+	historyRecords, err := getTimeLineHistoryRecords(startTimeline, folder)
 	if _, ok := err.(HistoryFileNotFoundError); ok {
 		// return empty map if not found any history
 		return timeLineHistoryMap, nil
 	}
+	// store records in a map for fast lookup by wal segment number
+	for _, record := range historyRecords {
+		walSegmentNo := newWalSegmentNo(record.lsn)
+		timeLineHistoryMap[walSegmentNo] = record
+	}
+	return timeLineHistoryMap, nil
+}
+
+func getTimeLineHistoryRecords(startTimeline uint32, folder storage.Folder) ([]*TimelineHistoryRecord, error) {
+	historyReadCloser, err := getHistoryFileFromStorage(startTimeline, folder)
 	if err != nil {
 		return nil, err
 	}
@@ -69,13 +76,7 @@ func createTimelineHistoryMap(startTimeline uint32, folder storage.Folder) (Time
 	if err != nil {
 		return nil, err
 	}
-
-	// store records in a map for fast lookup by wal segment number
-	for _, record := range historyRecords {
-		walSegmentNo := newWalSegmentNo(record.lsn)
-		timeLineHistoryMap[walSegmentNo] = record
-	}
-	return timeLineHistoryMap, nil
+	return historyRecords, nil
 }
 
 func parseHistoryFile(historyReader io.Reader) (historyRecords []*TimelineHistoryRecord, err error) {

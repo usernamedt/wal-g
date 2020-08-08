@@ -5,7 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/internal/compression"
+	"github.com/wal-g/wal-g/utility"
 	"regexp"
 )
 
@@ -51,27 +51,26 @@ func (desc *WalSegmentDescription) GetFileName() string {
 
 // WalSegmentRunner is used for sequential iteration over WAL segments in the storage
 type WalSegmentRunner struct {
-	// runBackwards controls the direction of WalSegmentRunner
-	runBackwards       bool
+	switchTimelines    bool
 	currentWalSegment  *WalSegmentDescription
-	walFolder          storage.Folder
-	walFolderFilenames map[string]bool
-	timelineHistoryMap TimelineHistoryMap
-	cachedDecompressor compression.Decompressor
+	walFolderSegments  map[WalSegmentDescription]bool
+	timelineHistoryMap map[WalSegmentNo]*TimelineHistoryRecord
+	stopSegmentNo      WalSegmentNo
 }
 
 func NewWalSegmentRunner(
-	runBackwards bool,
+	switchTimelines bool,
 	startWalSegment *WalSegmentDescription,
 	walFolder storage.Folder,
-	fileNames map[string]bool,
+	segments map[WalSegmentDescription]bool,
+	stopSegmentNo WalSegmentNo,
 ) (*WalSegmentRunner, error) {
 	historyMap, err := createTimelineHistoryMap(startWalSegment.timeline, walFolder)
 	if err != nil {
 		return nil, err
 	}
-	return &WalSegmentRunner{runBackwards, startWalSegment, walFolder,
-		fileNames, historyMap, nil}, nil
+	return &WalSegmentRunner{switchTimelines, startWalSegment,
+		segments, historyMap, stopSegmentNo}, nil
 }
 
 func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
@@ -80,13 +79,12 @@ func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {
 
 // MoveNext tries to get the next segment from storage
 func (r *WalSegmentRunner) MoveNext() (*WalSegmentDescription, error) {
-	if r.runBackwards && r.currentWalSegment.number <= 1 {
+	if r.currentWalSegment.number <= r.stopSegmentNo {
 		return nil, newReachedZeroSegmentError()
 	}
 	nextSegment := r.getNextSegment()
 	var fileExists bool
-	r.cachedDecompressor, fileExists = checkFileExistsInStorage(nextSegment.GetFileName(), r.walFolderFilenames, r.cachedDecompressor)
-	if !fileExists {
+	if _, fileExists = r.walFolderSegments[*nextSegment]; !fileExists {
 		return nil, newWalSegmentNotFoundError(nextSegment.GetFileName())
 	}
 	r.currentWalSegment = nextSegment
@@ -102,17 +100,14 @@ func (r *WalSegmentRunner) ForceMoveNext() {
 
 // getNextSegment calculates the next segment
 func (r *WalSegmentRunner) getNextSegment() *WalSegmentDescription {
-	var nextSegmentNo WalSegmentNo
 	nextTimeline := r.currentWalSegment.timeline
-	if r.runBackwards {
+	if r.switchTimelines {
 		if record, ok := r.getTimelineSwitchRecord(r.currentWalSegment.number); ok {
 			// switch timeline if current WAL segment number found in .history record
 			nextTimeline = record.timeline
 		}
-		nextSegmentNo = r.currentWalSegment.number.previous()
-	} else {
-		nextSegmentNo = r.currentWalSegment.number.next()
 	}
+	nextSegmentNo := r.currentWalSegment.number.previous()
 	return &WalSegmentDescription{timeline: nextTimeline, number: nextSegmentNo}
 }
 
@@ -125,29 +120,30 @@ func (r *WalSegmentRunner) getTimelineSwitchRecord(walSegmentNo WalSegmentNo) (*
 	return record, ok
 }
 
-// checkFileExistsInStorage checks that file with provided name exists in storage folder files
-func checkFileExistsInStorage(filename string, storageFiles map[string]bool,
-	lastDecompressor compression.Decompressor) (compression.Decompressor, bool) {
-	// this code fragment is partially borrowed from DownloadAndDecompressStorageFile()
-	for _, decompressor := range putDecompressorInFirstPlace(lastDecompressor, compression.Decompressors) {
-		_, exists := storageFiles[filename+"."+decompressor.FileExtension()]
-		if !exists {
-			continue
-		}
-		return decompressor, true
-	}
-	return lastDecompressor, false
-}
-
 // getFolderFilenames returns a set of filenames in provided storage folder
-func getFolderFilenames(folder storage.Folder) (map[string]bool, error) {
+func getFolderFilenames(folder storage.Folder) ([]string, error) {
 	objects, _, err := folder.ListFolder()
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]bool, len(objects))
+	filenames := make([]string, 0, len(objects))
 	for _, object := range objects {
-		result[object.GetName()] = true
+		filenames = append(filenames, object.GetName())
 	}
-	return result, nil
+	return filenames, nil
+}
+
+func getSegmentsFromFiles(filenames []string) map[WalSegmentDescription]bool {
+	walSegments := make(map[WalSegmentDescription]bool)
+	for _, filename := range filenames {
+		baseName := utility.TrimFileExtension(filename)
+		timeline, segmentNo, err := ParseWALFilename(baseName)
+		if _, ok := err.(NotWalFilenameError); ok {
+			// non-wal segment file, skip it
+			continue
+		}
+		segment := WalSegmentDescription{timeline: timeline, number: WalSegmentNo(segmentNo)}
+		walSegments[segment] = true
+	}
+	return walSegments
 }

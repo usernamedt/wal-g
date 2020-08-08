@@ -28,18 +28,6 @@ func (err LastSegmentNotFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
-// ParseStartWalSegment() gets start WAL segment from input string
-func ParseStartWalSegment(startWalSegmentInput string) *WalSegmentDescription {
-	matchResult := walSegmentNameRegexp.FindStringSubmatch(startWalSegmentInput)
-	if matchResult == nil {
-		tracelog.ErrorLogger.Fatalf("Provided WAL segment name is incorrect %v", startWalSegmentInput)
-	}
-	timeline, segmentNo, err := ParseWALFilename(matchResult[0])
-	tracelog.ErrorLogger.FatalfOnError("Failed to get timeline and WAL segment number " +
-		"from provided WAL segment name %v", err)
-	return &WalSegmentDescription{timeline: timeline, number: WalSegmentNo(segmentNo)}
-}
-
 // QueryCurrentWalSegment() gets start WAL segment from Postgres cluster
 func QueryCurrentWalSegment() *WalSegmentDescription {
 	conn, err := Connect()
@@ -69,7 +57,8 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescr
 	fileNames, err := getFolderFilenames(walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
 
-	walSegmentRunner, err := NewWalSegmentRunner(true, startWalSegment, walFolder, fileNames)
+	segments := getSegmentsFromFiles(fileNames)
+	walSegmentRunner, err := NewWalSegmentRunner(true, startWalSegment, walFolder, segments, 0)
 	tracelog.ErrorLogger.FatalfOnError("Failed to initialize WAL segment runner %v", err)
 
 	// maxConcurrency is needed to determine max amount of missing WAL segments
