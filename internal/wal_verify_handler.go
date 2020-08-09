@@ -68,22 +68,43 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescr
 	tracelog.ErrorLogger.FatalOnError(err)
 
 	tracelog.InfoLogger.Printf("Start WAL segment: %s", startWalSegment.GetFileName())
-	sequenceStart, sequenceEnd, err := FindNextContinuousSequence(walSegmentRunner, maxConcurrency)
+	sequenceStart, sequenceEnd, delayedSegments, uploadingSegments, err := FindNextContinuousSequence(walSegmentRunner, maxConcurrency)
 	if _, ok := err.(ReachedZeroSegmentError); ok {
 		tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
 		return
 	}
 	tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk %v", err)
+	if len(delayedSegments) >0 {
+		tracelog.InfoLogger.Printf("Missing WAL segments (probably delayed):\n")
+		PrintSegments(delayedSegments)
+	}
+	if len(uploadingSegments) >0 {
+		tracelog.InfoLogger.Printf("Missing WAL segments (probably uploading):\n")
+		PrintSegments(uploadingSegments)
+	}
 	PrintSequenceInfo(sequenceStart, sequenceEnd)
 
+	missingSegments := make([]*WalSegmentDescription,0)
 	for {
-		_, _, err = FindNextContinuousSequence(walSegmentRunner, 0)
+		sequenceStart, sequenceEnd, skipped, _, err := FindNextContinuousSequence(walSegmentRunner, 0)
+		missingSegments = append(missingSegments, skipped...)
 		if _, ok := err.(ReachedZeroSegmentError); ok {
+			PrintSequenceInfo(sequenceStart, sequenceEnd)
 			tracelog.InfoLogger.Println("Reached zero WAL segment. Exiting...")
 			break
 		}
 		tracelog.ErrorLogger.FatalfOnError("Error during WAL segment sequence walk %v", err)
 		PrintSequenceInfo(sequenceStart, sequenceEnd)
+	}
+	if len(missingSegments) >0 {
+		tracelog.WarningLogger.Printf("Missing WAL segments:\n")
+		PrintSegments(missingSegments)
+	}
+}
+
+func PrintSegments(segments []*WalSegmentDescription) {
+	for _, segment := range segments {
+		tracelog.InfoLogger.Println(segment.GetFileName())
 	}
 }
 
@@ -91,45 +112,50 @@ func PrintSequenceInfo(start, end *WalSegmentDescription) {
 	tracelog.InfoLogger.Println("WAL segments continuous sequence START: " + start.GetFileName())
 	tracelog.InfoLogger.Println("WAL segments continuous sequence END: " + end.GetFileName())
 
-	// TODO: print available backups in the resulting WAL segments range
+	// TODO: maybe print available backups in the resulting WAL segments range
 	// We can do PITR starting from the backup in range [start, end]
 }
 
-func FindNextContinuousSequence(runner *WalSegmentRunner, uploadingSegmentRangeSize int) (*WalSegmentDescription, *WalSegmentDescription, error) {
+func FindNextContinuousSequence(runner *WalSegmentRunner, uploadingSegmentRangeSize int) (*WalSegmentDescription,
+	*WalSegmentDescription, []*WalSegmentDescription, []*WalSegmentDescription, error) {
 	// Run to the latest WAL segment available in storage
-	err := runToLastStorageSegment(runner)
+	skippedStartSegments, err := runToFirstFoundSegment(runner)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	startSegment := runner.GetCurrent()
 
 	// New startSegment might be chosen if there is some skipped segments after current startSegment
 	// because we need a continuous sequence
-	startSegment, lastExistingSegment, err := traverseUploadingSegments(runner, uploadingSegmentRangeSize)
+	skippedUploadingSegments, startSegment, lastExistingSegment, err := traverseUploadingSegments(runner, uploadingSegmentRangeSize)
 	if _, ok := err.(LastSegmentNotFoundError); ok {
 		// LastSegmentNotFoundError means that the last segment in uploading WAL segments sequence
 		// is not available in storage so we need to return range [startSegment, lastExistingSegment]
-		return startSegment, lastExistingSegment, nil
+		return startSegment, lastExistingSegment, skippedStartSegments, skippedUploadingSegments, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
+
 	// Run to the first storage WAL segment (in sequence)
-	err = runToFirstStorageSegment(runner)
+	err = runToFirstNotFoundSegment(runner)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	endSegment := runner.GetCurrent()
-	return endSegment, startSegment, nil
+	return endSegment, startSegment, skippedStartSegments, skippedUploadingSegments, nil
 }
 
 // traverseUploadingSegments is used to walk through WAL segments sequence sections that is probably
 // being uploaded. It may contain missing segments because they are still being uploaded.
 // Last element of "uploading" segments sequence should always exist and can not be skipped.
-func traverseUploadingSegments(runner *WalSegmentRunner, uploadingSequenceRange int) (*WalSegmentDescription, *WalSegmentDescription, error) {
+func traverseUploadingSegments(runner *WalSegmentRunner, uploadingSequenceRange int) ([]*WalSegmentDescription,
+	*WalSegmentDescription, *WalSegmentDescription, error) {
 	firstExistingSegment := runner.GetCurrent()
 	lastExistingSegment := runner.GetCurrent()
 	previousSegmentExists := true
+	skippedUploadingSegments := make([]*WalSegmentDescription, 0)
+
 	for i := 0; i < uploadingSequenceRange; i++ {
 		currentSegment, err := runner.MoveNext()
 		if err != nil {
@@ -138,15 +164,16 @@ func traverseUploadingSegments(runner *WalSegmentRunner, uploadingSequenceRange 
 				// WalSegmentNotFoundError means we reached the end of continuous WAL segments sequence
 				runner.ForceMoveNext()
 				previousSegmentExists = false
-				tracelog.WarningLogger.Printf("Skipped missing segment %s, probably still uploading\n",
+				tracelog.DebugLogger.Printf("Skipped missing segment %s, probably still uploading\n",
 					runner.GetCurrent().GetFileName())
+				skippedUploadingSegments = append(skippedUploadingSegments, runner.GetCurrent())
 				continue
 			case ReachedZeroSegmentError:
 				// Can't continue because reached segment with zero number
 				// so throw an error and return continuous segments sequence
-				return firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
+				return skippedUploadingSegments, firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
 			default:
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 		if !previousSegmentExists {
@@ -161,14 +188,14 @@ func traverseUploadingSegments(runner *WalSegmentRunner, uploadingSequenceRange 
 	if !previousSegmentExists {
 		// Last segment needs to exist and can't be skipped
 		// so we should throw an error and return continuous segments sequence
-		return firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
+		return skippedUploadingSegments, firstExistingSegment, lastExistingSegment, newLastSegmentNotFoundError()
 	}
-	return firstExistingSegment, lastExistingSegment, nil
+	return skippedUploadingSegments, firstExistingSegment, lastExistingSegment, nil
 }
 
-// runToFirstStorageSegment travels the continuous WAL segments section and exits
+// runToFirstNotFoundSegment travels the continuous WAL segments section and exits
 // if missing segment or segment with zero number encountered.
-func runToFirstStorageSegment(runner *WalSegmentRunner) error {
+func runToFirstNotFoundSegment(runner *WalSegmentRunner) error {
 	for {
 		nextSegment, err := runner.MoveNext()
 		if err != nil {
@@ -188,20 +215,22 @@ func runToFirstStorageSegment(runner *WalSegmentRunner) error {
 	}
 }
 
-// runToLastStorageSegment should find the first non-missing segment and exit
-func runToLastStorageSegment(runner *WalSegmentRunner) error {
+// runToFirstFoundSegment should find the first non-missing segment and exit
+func runToFirstFoundSegment(runner *WalSegmentRunner) ([]*WalSegmentDescription, error) {
+	skippedSegments := make([]*WalSegmentDescription, 0)
 	for {
 		if _, err := runner.MoveNext(); err != nil {
 			if _, ok := err.(WalSegmentNotFoundError); ok {
 				// force switch to the next WAL segment
 				runner.ForceMoveNext()
-				tracelog.WarningLogger.Printf("Skipped missing segment %s\n",
+				tracelog.DebugLogger.Printf("Skipped missing segment %s\n",
 					runner.currentWalSegment.GetFileName())
+				skippedSegments = append(skippedSegments, runner.GetCurrent())
 				continue
 			}
-			return err
+			return skippedSegments, err
 		}
-		return nil
+		return skippedSegments, nil
 	}
 }
 
