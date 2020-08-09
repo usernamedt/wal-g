@@ -58,8 +58,9 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescr
 	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
 
 	segments := getSegmentsFromFiles(fileNames)
-	walSegmentRunner, err := NewWalSegmentRunner(true, startWalSegment, walFolder, segments, 0)
-	tracelog.ErrorLogger.FatalfOnError("Failed to initialize WAL segment runner %v", err)
+	timelineHistoryMap, err := createTimelineHistoryMap(startWalSegment.timeline, walFolder)
+	tracelog.ErrorLogger.FatalfOnError("Failed to initialize timeline history map %v", err)
+	walSegmentRunner := NewWalSegmentRunner(true, startWalSegment, timelineHistoryMap, segments, 0)
 
 	// maxConcurrency is needed to determine max amount of missing WAL segments
 	// after the last found WAL segment which can be skipped ("uploading" segment sequence size)

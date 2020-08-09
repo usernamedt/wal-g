@@ -48,9 +48,9 @@ func newHistoryRecordFromString(row string) (*TimelineHistoryRecord, error) {
 }
 
 // createTimelineHistoryMap tries to fetch and parse .history file
-func createTimelineHistoryMap(startTimeline uint32, folder storage.Folder) (map[WalSegmentNo]*TimelineHistoryRecord, error) {
+func createTimelineHistoryMap(startTimeline uint32, walFolder storage.Folder) (map[WalSegmentNo]*TimelineHistoryRecord, error) {
 	timeLineHistoryMap := make(map[WalSegmentNo]*TimelineHistoryRecord, 0)
-	historyRecords, err := getTimeLineHistoryRecords(startTimeline, folder)
+	historyRecords, err := getTimeLineHistoryRecords(startTimeline, walFolder)
 	if _, ok := err.(HistoryFileNotFoundError); ok {
 		// return empty map if not found any history
 		return timeLineHistoryMap, nil
@@ -63,8 +63,8 @@ func createTimelineHistoryMap(startTimeline uint32, folder storage.Folder) (map[
 	return timeLineHistoryMap, nil
 }
 
-func getTimeLineHistoryRecords(startTimeline uint32, folder storage.Folder) ([]*TimelineHistoryRecord, error) {
-	historyReadCloser, err := getHistoryFileFromStorage(startTimeline, folder)
+func getTimeLineHistoryRecords(startTimeline uint32, walFolder storage.Folder) ([]*TimelineHistoryRecord, error) {
+	historyReadCloser, err := getHistoryFileFromStorage(startTimeline, walFolder)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +100,9 @@ func parseHistoryFile(historyReader io.Reader) (historyRecords []*TimelineHistor
 	return historyRecords, err
 }
 
-func getHistoryFileFromStorage(timeline uint32, folder storage.Folder) (io.ReadCloser, error) {
+func getHistoryFileFromStorage(timeline uint32, walFolder storage.Folder) (io.ReadCloser, error) {
 	historyFileName := fmt.Sprintf(walHistoryFileFormat, timeline)
-	reader, err := DownloadAndDecompressStorageFile(folder, historyFileName)
+	reader, err := DownloadAndDecompressStorageFile(walFolder, historyFileName)
 	if _, ok := err.(ArchiveNonExistenceError); ok {
 		return nil, newHistoryFileNotFoundError(historyFileName)
 	}

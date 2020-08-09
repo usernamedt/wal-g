@@ -61,16 +61,12 @@ type WalSegmentRunner struct {
 func NewWalSegmentRunner(
 	switchTimelines bool,
 	startWalSegment *WalSegmentDescription,
-	walFolder storage.Folder,
+	timelineHistoryMap map[WalSegmentNo]*TimelineHistoryRecord,
 	segments map[WalSegmentDescription]bool,
 	stopSegmentNo WalSegmentNo,
-) (*WalSegmentRunner, error) {
-	historyMap, err := createTimelineHistoryMap(startWalSegment.timeline, walFolder)
-	if err != nil {
-		return nil, err
-	}
+) *WalSegmentRunner {
 	return &WalSegmentRunner{switchTimelines, startWalSegment,
-		segments, historyMap, stopSegmentNo}, nil
+		segments, timelineHistoryMap, stopSegmentNo}
 }
 
 func (r *WalSegmentRunner) GetCurrent() *WalSegmentDescription {

@@ -22,7 +22,7 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			folder, err := internal.ConfigureFolder()
 			tracelog.ErrorLogger.FatalOnError(err)
-			internal.HandleWalShow(folder)
+			internal.HandleWalShow(folder, true, internal.NewWalShowOutputFormatter(internal.JsonOutput))
 		},
 	}
 )
