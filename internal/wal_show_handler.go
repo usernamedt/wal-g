@@ -2,29 +2,40 @@ package internal
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/jedib0t/go-pretty/table"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
+	"io"
+	"sort"
+)
+
+const (
+	TimelineOkStatus          = "OK"
+	TimelineLostSegmentStatus = "LOST_SEG"
 )
 
 type TimelineInfo struct {
-	Id              uint32          `json:"id"`
-	ParentId        uint32          `json:"parentId"`
-	SwitchPointLsn  uint64          `json:"switchPointLsn"`
-	StartSegment    string          `json:"startSegment"`
-	EndSegment      string          `json:"endSegment"`
-	SegmentsCount   int             `json:"segmentsCount"`
-	MissingSegments []string        `json:"missingSegments"`
-	Backups         []*BackupDetail `json:"availableBackups,omitempty"`
+	Id               uint32          `json:"id"`
+	ParentId         uint32          `json:"parentId"`
+	SwitchPointLsn   uint64          `json:"switchPointLsn"`
+	StartSegment     string          `json:"startSegment"`
+	EndSegment       string          `json:"endSegment"`
+	SegmentsCount    int             `json:"segmentsCount"`
+	MissingSegments  []string        `json:"missingSegments"`
+	Backups          []*BackupDetail `json:"availableBackups,omitempty"`
+	SegmentRangeSize uint64          `json:"segmentRangeSize"`
+	Status           string          `json:"status"`
 }
 
 func newTimelineInfo(walSegments *WalSegmentsSequence, historyRecords []*TimelineHistoryRecord, folder storage.Folder) (*TimelineInfo, error) {
 	timelineInfo := &TimelineInfo{
-		Id:            walSegments.timelineId,
-		StartSegment:  walSegments.minSegmentNo.getFilename(walSegments.timelineId),
-		EndSegment:    walSegments.maxSegmentNo.getFilename(walSegments.timelineId),
-		SegmentsCount: len(walSegments.walSegmentNumbers),
+		Id:               walSegments.timelineId,
+		StartSegment:     walSegments.minSegmentNo.getFilename(walSegments.timelineId),
+		EndSegment:       walSegments.maxSegmentNo.getFilename(walSegments.timelineId),
+		SegmentsCount:    len(walSegments.walSegmentNumbers),
+		SegmentRangeSize: uint64(walSegments.maxSegmentNo-walSegments.minSegmentNo) + 1,
+		Status:           TimelineOkStatus,
 	}
 	missingSegments, err := walSegments.GetMissingSegments(folder)
 	if err != nil {
@@ -33,6 +44,10 @@ func newTimelineInfo(walSegments *WalSegmentsSequence, historyRecords []*Timelin
 	timelineInfo.MissingSegments = make([]string, 0, len(missingSegments))
 	for _, segment := range missingSegments {
 		timelineInfo.MissingSegments = append(timelineInfo.MissingSegments, segment.GetFileName())
+	}
+
+	if len(timelineInfo.MissingSegments) > 0 {
+		timelineInfo.Status = TimelineLostSegmentStatus
 	}
 
 	// set parent timeline id and timeline switch LSN if have .history record available
@@ -105,23 +120,21 @@ func (data *WalSegmentsSequence) GetMissingSegments(walFolder storage.Folder) ([
 	}
 }
 
-func HandleWalShow(rootFolder storage.Folder, showBackups bool, outputFormatter WalShowOutputFormatter) {
+func HandleWalShow(rootFolder storage.Folder, showBackups bool, outputWriter WalShowOutputWriter) {
 	walFolder := rootFolder.GetSubFolder(utility.WalPath)
 	filenames, err := getFolderFilenames(walFolder)
-	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v\n", err)
 
 	walSegments := getSegmentsFromFiles(filenames)
 	segmentsByTimelines, err := groupSegmentsByTimelines(walSegments)
-	tracelog.ErrorLogger.FatalfOnError("Failed to timelines %v", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to group segments by timelines %v\n", err)
 
 	timelineInfos := make([]*TimelineInfo, 0, len(segmentsByTimelines))
 	for _, segmentsSequence := range segmentsByTimelines {
-		fmt.Printf("TL %d COUNT %d RANGE %d START %s END %s\n", segmentsSequence.timelineId, len(segmentsSequence.walSegmentNumbers), segmentsSequence.maxSegmentNo-segmentsSequence.minSegmentNo+1, segmentsSequence.minSegmentNo.getFilename(segmentsSequence.timelineId), segmentsSequence.maxSegmentNo.getFilename(segmentsSequence.timelineId))
-
 		historyRecords, err := getTimeLineHistoryRecords(segmentsSequence.timelineId, walFolder)
 		if err != nil {
 			if _, ok := err.(HistoryFileNotFoundError); !ok {
-				tracelog.ErrorLogger.Fatalf(" %v", err)
+				tracelog.ErrorLogger.Fatalf("Error while loading .history file %v\n", err)
 			}
 		}
 
@@ -133,15 +146,20 @@ func HandleWalShow(rootFolder storage.Folder, showBackups bool, outputFormatter 
 		backups, err := getBackups(rootFolder)
 		tracelog.ErrorLogger.FatalfOnError("Failed to get backups: %v\n", err)
 		backupDetails, err := getBackupDetails(rootFolder, backups)
-		tracelog.ErrorLogger.FatalfOnError("Failed to get backup details: %v\n", err)
+		tracelog.ErrorLogger.FatalfOnError("Failed to get backups details: %v\n", err)
 		for _, info := range timelineInfos {
 			info.Backups, err = getBackupsInRange(info.StartSegment, info.EndSegment, info.Id, backupDetails)
 			tracelog.ErrorLogger.FatalOnError(err)
 		}
 	}
 
-	resultB, _ := outputFormatter.Format(timelineInfos)
-	fmt.Println(string(resultB))
+	// order timelines by ID
+	sort.Slice(timelineInfos, func(i, j int) bool {
+		return timelineInfos[i].Id < timelineInfos[j].Id
+	})
+
+	err = outputWriter.Write(timelineInfos)
+	tracelog.ErrorLogger.FatalfOnError("Error writing output: %v\n", err)
 }
 
 func groupSegmentsByTimelines(segments map[WalSegmentDescription]bool) (map[uint32]*WalSegmentsSequence, error) {
@@ -174,31 +192,65 @@ func getBackupsInRange(start, end string, timeline uint32, backups []BackupDetai
 	return filteredBackups, nil
 }
 
-type WalShowOutputFormatter interface {
-	Format(timelineInfos []*TimelineInfo) ([]byte, error)
+type WalShowOutputWriter interface {
+	Write(timelineInfos []*TimelineInfo) error
 }
 
-type WalShowJsonOutputFormatter struct {
+type WalShowJsonOutputWriter struct {
+	output io.Writer
 }
 
-func (formatter *WalShowJsonOutputFormatter) Format(timelineInfos []*TimelineInfo) ([]byte, error) {
-	return json.Marshal(timelineInfos)
+func (writer *WalShowJsonOutputWriter) Write(timelineInfos []*TimelineInfo) error {
+	bytes, err := json.Marshal(timelineInfos)
+	if err != nil {
+		return err
+	}
+	_, err = writer.output.Write(bytes)
+	return err
 }
 
-func NewWalShowOutputFormatter(outputType WalShowOutputType) WalShowOutputFormatter {
+type WalShowTableOutputWriter struct {
+	output io.Writer
+	includeBackups bool
+}
+
+func (writer *WalShowTableOutputWriter) Write(timelineInfos []*TimelineInfo) error {
+	tableWriter := table.NewWriter()
+	tableWriter.SetOutputMirror(writer.output)
+	defer tableWriter.Render()
+	header := table.Row{"TLI", "Parent TLI", "Switchpoint LSN", "Start segment",
+		"End segment", "Segment range", "Segments count", "Status"}
+	if writer.includeBackups {
+		header = append(header, "Backups count")
+	}
+	tableWriter.AppendHeader(header)
+
+	for _, tl := range timelineInfos {
+		row := table.Row{tl.Id, tl.ParentId, tl.SwitchPointLsn, tl.StartSegment,
+			tl.EndSegment, tl.SegmentRangeSize, tl.SegmentsCount, tl.Status}
+		if writer.includeBackups {
+			row = append(row, len(tl.Backups))
+		}
+		tableWriter.AppendRow(row)
+	}
+
+	return nil
+}
+
+func NewWalShowOutputWriter(outputType WalShowOutputType, output io.Writer, includeBackups bool) WalShowOutputWriter {
 	switch outputType {
-	case TextOutput:
-		panic("TextOutput is not implemented :(")
+	case TableOutput:
+		return &WalShowTableOutputWriter{output: output, includeBackups: includeBackups}
 	case JsonOutput:
-		return &WalShowJsonOutputFormatter{}
+		return &WalShowJsonOutputWriter{output: output}
 	default:
-		return &WalShowJsonOutputFormatter{}
+		return &WalShowTableOutputWriter{output: output, includeBackups: includeBackups}
 	}
 }
 
 type WalShowOutputType int
 
 const (
-	TextOutput WalShowOutputType = iota + 1
+	TableOutput WalShowOutputType = iota + 1
 	JsonOutput
 )

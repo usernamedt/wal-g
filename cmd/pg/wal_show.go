@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/internal"
+	"os"
 )
 
 const (
@@ -22,7 +23,8 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			folder, err := internal.ConfigureFolder()
 			tracelog.ErrorLogger.FatalOnError(err)
-			internal.HandleWalShow(folder, true, internal.NewWalShowOutputFormatter(internal.JsonOutput))
+			outputWriter := internal.NewWalShowOutputWriter(internal.JsonOutput, os.Stdout, true)
+			internal.HandleWalShow(folder, true, outputWriter)
 		},
 	}
 )
