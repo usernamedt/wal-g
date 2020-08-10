@@ -8,7 +8,7 @@ type SegmentScanConfig struct {
 	scanSegmentsCount       int
 	stopOnFirstFoundSegment bool
 
-	missingSegmentHandleFunc func (segment *WalSegmentDescription)
+	missingSegmentHandleFunc func(segment *WalSegmentDescription)
 }
 
 type WalSegmentsScanner struct {
@@ -29,81 +29,57 @@ func NewWalSegmentsScanner(walSegmentRunner *WalSegmentRunner, uploadingSegmentR
 	}
 }
 
-func (sf *WalSegmentsScanner) addExistingSegment(description *WalSegmentDescription) {
+func (scanner *WalSegmentsScanner) addExistingSegment(description *WalSegmentDescription) {
 	tracelog.DebugLogger.Println("Walked segment " + description.GetFileName())
-	sf.existingSegments = append(sf.existingSegments, description)
+	scanner.existingSegments = append(scanner.existingSegments, description)
 }
 
-func (sf *WalSegmentsScanner) addLostMissingSegment(description *WalSegmentDescription) {
+func (scanner *WalSegmentsScanner) addLostMissingSegment(description *WalSegmentDescription) {
 	tracelog.DebugLogger.Printf("Skipped missing segment (lost) %s\n",
-		sf.walSegmentRunner.GetCurrent().GetFileName())
+		scanner.walSegmentRunner.GetCurrent().GetFileName())
 	missingSegment := &MissingSegmentDescription{*description, Lost}
-	sf.missingSegments = append(sf.missingSegments, missingSegment)
+	scanner.missingSegments = append(scanner.missingSegments, missingSegment)
 }
 
-func (sf *WalSegmentsScanner) addUploadingMissingSegment(description *WalSegmentDescription) {
+func (scanner *WalSegmentsScanner) addUploadingMissingSegment(description *WalSegmentDescription) {
 	tracelog.DebugLogger.Printf("Skipped missing segment (probably uploading) %s\n",
-		sf.walSegmentRunner.GetCurrent().GetFileName())
+		scanner.walSegmentRunner.GetCurrent().GetFileName())
 	missingSegment := &MissingSegmentDescription{*description, ProbablyUploading}
-	sf.missingSegments = append(sf.missingSegments, missingSegment)
+	scanner.missingSegments = append(scanner.missingSegments, missingSegment)
 }
 
-func (sf *WalSegmentsScanner) addDelayedMissingSegment(description *WalSegmentDescription) {
+func (scanner *WalSegmentsScanner) addDelayedMissingSegment(description *WalSegmentDescription) {
 	tracelog.DebugLogger.Printf("Skipped missing segment (probably delayed) %s\n",
-		sf.walSegmentRunner.GetCurrent().GetFileName())
+		scanner.walSegmentRunner.GetCurrent().GetFileName())
 	missingSegment := &MissingSegmentDescription{*description, ProbablyDelayed}
-	sf.missingSegments = append(sf.missingSegments, missingSegment)
+	scanner.missingSegments = append(scanner.missingSegments, missingSegment)
 }
 
-func (sf *WalSegmentsScanner) Scan() error {
-	// Run to the latest WAL segment available in storage
-	scanConfig := SegmentScanConfig{
-		infiniteScan: true,
-		stopOnFirstFoundSegment: true,
-		missingSegmentHandleFunc: sf.addDelayedMissingSegment,
-	}
-	err := sf.scanSegments(scanConfig)
-	if err != nil {
-		return err
-	}
-
-	// New startSegment might be chosen if there is some skipped segments after current startSegment
-	// because we need a continuous sequence
-	scanConfig = SegmentScanConfig{
-		scanSegmentsCount: sf.uploadingSegmentRangeSize,
-		stopOnFirstFoundSegment: true,
-		missingSegmentHandleFunc: sf.addUploadingMissingSegment,
-	}
-	err = sf.scanSegments(scanConfig)
-	if err != nil {
-		return err
-	}
-
-	scanConfig = SegmentScanConfig{
-		infiniteScan: true,
-		missingSegmentHandleFunc: sf.addLostMissingSegment,
-	}
-	// Run to the first storage WAL segment (in sequence)
-	return sf.scanSegments(scanConfig)
-}
-
-func (sf *WalSegmentsScanner) scanSegments(config SegmentScanConfig) error {
+func (scanner *WalSegmentsScanner) scanSegments(config SegmentScanConfig) error {
 	for i := 0; config.infiniteScan || i < config.scanSegmentsCount; i++ {
-		currentSegment, err := sf.walSegmentRunner.MoveNext()
+		currentSegment, err := scanner.walSegmentRunner.MoveNext()
 		if err != nil {
 			switch err := err.(type) {
 			case WalSegmentNotFoundError:
-				sf.walSegmentRunner.ForceMoveNext()
-				config.missingSegmentHandleFunc(sf.walSegmentRunner.GetCurrent())
+				scanner.walSegmentRunner.ForceMoveNext()
+				config.missingSegmentHandleFunc(scanner.walSegmentRunner.GetCurrent())
 				continue
 			default:
 				return err
 			}
 		}
-		sf.addExistingSegment(currentSegment)
+		scanner.addExistingSegment(currentSegment)
 		if config.stopOnFirstFoundSegment {
 			return nil
 		}
 	}
 	return nil
+}
+
+func (scanner *WalSegmentsScanner) GetMissingSegmentsDescriptions() []*WalSegmentDescription {
+	result := make([]*WalSegmentDescription, 0, len(scanner.missingSegments))
+	for _, segment := range scanner.missingSegments {
+		result = append(result, &segment.WalSegmentDescription)
+	}
+	return result
 }

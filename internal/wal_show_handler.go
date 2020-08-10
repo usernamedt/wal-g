@@ -102,23 +102,16 @@ func (data *WalSegmentsSequence) FindMissingSegments() ([]*WalSegmentDescription
 	// create WAL segment runner to run on single timeline
 	walSegmentRunner := NewWalSegmentRunner(false, startWalSegment, nil,
 		walSegments, data.minSegmentNo)
-	missingSegments := make([]*WalSegmentDescription, 0)
-	for {
-		if _, err := walSegmentRunner.MoveNext(); err != nil {
-			switch err := err.(type) {
-			case WalSegmentNotFoundError:
-				// force switch to the next WAL segment
-				walSegmentRunner.ForceMoveNext()
-				missingSegments = append(missingSegments, walSegmentRunner.currentWalSegment)
-				continue
-			case ReachedZeroSegmentError:
-				// Can't continue because reached segment with zero number, stop at this point
-				return missingSegments, nil
-			default:
-				return nil, err
-			}
-		}
+	walSegmentScanner := NewWalSegmentsScanner(walSegmentRunner, 0)
+	scanConfig := SegmentScanConfig{
+		infiniteScan: true,
+		missingSegmentHandleFunc: walSegmentScanner.addLostMissingSegment,
 	}
+	err :=walSegmentScanner.scanSegments(scanConfig)
+	if _, ok := err.(ReachedZeroSegmentError); !ok {
+		tracelog.ErrorLogger.FatalfOnError("Failed to do WAL segments scan %v", err)
+	}
+	return walSegmentScanner.GetMissingSegmentsDescriptions(), nil
 }
 
 // HandleWalShow gets the list of files inside WAL folder, detects the available WAL segments,

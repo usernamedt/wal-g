@@ -51,13 +51,13 @@ func QueryCurrentWalSegment() *WalSegmentDescription {
 // to find any missing WAL segments that could potentially fail the PITR procedure
 func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescription) {
 	walFolder := rootFolder.GetSubFolder(utility.WalPath)
-	fileNames, err := getFolderFilenames(walFolder)
+	storageFileNames, err := getFolderFilenames(walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
 
-	segments := getSegmentsFromFiles(fileNames)
+	storageSegments := getSegmentsFromFiles(storageFileNames)
 	timelineHistoryMap, err := createTimelineHistoryMap(startWalSegment.timeline, walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to initialize timeline history map %v", err)
-	walSegmentRunner := NewWalSegmentRunner(true, startWalSegment, timelineHistoryMap, segments, 0)
+	walSegmentRunner := NewWalSegmentRunner(true, startWalSegment, timelineHistoryMap, storageSegments, 0)
 
 	// maxConcurrency is needed to determine max amount of missing WAL segments
 	// after the last found WAL segment which can be skipped ("uploading" segment sequence size)
@@ -67,25 +67,90 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescr
 	tracelog.InfoLogger.Printf("Start WAL segment: %s", startWalSegment.GetFileName())
 
 	segmentScanner := NewWalSegmentsScanner(walSegmentRunner, maxConcurrency)
-	err = segmentScanner.Scan()
+	err = Scan(segmentScanner)
 	if _, ok := err.(ReachedZeroSegmentError); !ok {
 		tracelog.ErrorLogger.FatalfOnError("Failed to do WAL segments scan %v", err)
 	}
-	fmt.Println("EXISTING SEGMENTS:")
-	printSegments(segmentScanner.existingSegments)
-	fmt.Println("MISSING SEGMENTS:")
-	printMissingSegments(segmentScanner.missingSegments)
+	printWalVerifyReport(segmentScanner.missingSegments, segmentScanner.existingSegments)
 }
 
-func printMissingSegments(segments []*MissingSegmentDescription) {
-	for _, segment := range segments {
-		tracelog.InfoLogger.Println(segment.GetFileName() + ": " + segment.status.String())
+func printWalVerifyReport(missingSegments []*MissingSegmentDescription, existingSegments []*WalSegmentDescription) {
+	existingSequences := make([]*WalSegmentsSequence, 0)
+	currentSequence := NewSegmentsSequence(existingSegments[0].timeline, existingSegments[0].number)
+	for _, segment := range existingSegments[1:] {
+		if currentSequence.timelineId != segment.timeline || currentSequence.minSegmentNo != segment.number.next() {
+			existingSequences = append(existingSequences, currentSequence)
+			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
+		} else {
+			currentSequence.AddWalSegmentNo(segment.number)
+		}
 	}
+	fmt.Println("EXISTING SEGMENTS SEQ:")
+	printSequences(existingSequences)
+	missingSequences := make([]*WalSegmentsSequence, 0)
+	currentSequence = NewSegmentsSequence(missingSegments[0].timeline, missingSegments[0].number)
+	currentStatus := missingSegments[0].status
+	for _, segment := range missingSegments[1:] {
+		if segment.status != currentStatus {
+			fmt.Println(segment.status.String() +  " SEGMENTS:")
+			printSequences(missingSequences)
+			missingSequences = make([]*WalSegmentsSequence, 0)
+			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
+			currentStatus = segment.status
+		}
+
+		if currentSequence.timelineId != segment.timeline ||
+			currentSequence.minSegmentNo != segment.number.next() {
+			missingSequences = append(missingSequences, currentSequence)
+			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
+			currentStatus = segment.status
+		} else {
+			currentSequence.AddWalSegmentNo(segment.number)
+		}
+	}
+	fmt.Println(currentStatus.String() +  " SEGMENTS:")
+	printSequences(missingSequences)
 }
 
-func printSegments(segments []*WalSegmentDescription) {
-	for _, segment := range segments {
-		tracelog.InfoLogger.Println(segment.GetFileName())
+func Scan(scanner *WalSegmentsScanner) error {
+	// Run to the latest WAL segment available in storage
+	scanConfig := SegmentScanConfig{
+		infiniteScan: true,
+		stopOnFirstFoundSegment: true,
+		missingSegmentHandleFunc: scanner.addDelayedMissingSegment,
+	}
+	err := scanner.scanSegments(scanConfig)
+	if err != nil {
+		return err
+	}
+
+	// New startSegment might be chosen if there is some skipped segments after current startSegment
+	// because we need a continuous sequence
+	scanConfig = SegmentScanConfig{
+		scanSegmentsCount: scanner.uploadingSegmentRangeSize,
+		stopOnFirstFoundSegment: true,
+		missingSegmentHandleFunc: scanner.addUploadingMissingSegment,
+	}
+	err = scanner.scanSegments(scanConfig)
+	if err != nil {
+		return err
+	}
+
+	scanConfig = SegmentScanConfig{
+		infiniteScan: true,
+		missingSegmentHandleFunc: scanner.addLostMissingSegment,
+	}
+	// Run to the first storage WAL segment (in sequence)
+	return scanner.scanSegments(scanConfig)
+}
+
+func printSequences(sequences []*WalSegmentsSequence) {
+	for _, seq := range sequences {
+		tracelog.InfoLogger.Printf("TL %d [%s, %s]\n",
+			seq.timelineId,
+			seq.minSegmentNo.getFilename(seq.timelineId),
+			seq.maxSegmentNo.getFilename(seq.timelineId),
+			)
 	}
 }
 
@@ -110,3 +175,4 @@ func getCurrentTimeline(conn *pgx.Conn) (uint32, error) {
 	}
 	return timeline, nil
 }
+
