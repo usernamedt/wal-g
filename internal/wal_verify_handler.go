@@ -1,28 +1,28 @@
 package internal
 
 import (
-	"fmt"
 	"github.com/jackc/pgx"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
 )
 
-type MissingSegmentStatus int
+type ScannedSegmentStatus int
 
 const (
-	Lost MissingSegmentStatus = iota + 1
+	Lost ScannedSegmentStatus = iota + 1
 	ProbablyUploading
 	ProbablyDelayed
+	Found
 )
 
-type MissingSegmentDescription struct {
+type ScannedSegmentDescription struct {
 	WalSegmentDescription
-	status MissingSegmentStatus
+	status ScannedSegmentStatus
 }
 
-func (status MissingSegmentStatus) String() string {
-	return [...]string{"", "Lost", "ProbablyUploading", "ProbablyDelayed"}[status]
+func (status ScannedSegmentStatus) String() string {
+	return [...]string{"", "Lost", "ProbablyUploading", "ProbablyDelayed", "Found"}[status]
 }
 
 // QueryCurrentWalSegment() gets start WAL segment from Postgres cluster
@@ -52,7 +52,7 @@ func QueryCurrentWalSegment() *WalSegmentDescription {
 func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescription) {
 	walFolder := rootFolder.GetSubFolder(utility.WalPath)
 	storageFileNames, err := getFolderFilenames(walFolder)
-	tracelog.ErrorLogger.FatalfOnError("Failed to get wal folder filenames %v", err)
+	tracelog.ErrorLogger.FatalfOnError("Failed to get WAL folder filenames %v", err)
 
 	storageSegments := getSegmentsFromFiles(storageFileNames)
 	timelineHistoryMap, err := createTimelineHistoryMap(startWalSegment.timeline, walFolder)
@@ -67,59 +67,38 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment *WalSegmentDescr
 	tracelog.InfoLogger.Printf("Start WAL segment: %s", startWalSegment.GetFileName())
 
 	segmentScanner := NewWalSegmentsScanner(walSegmentRunner, maxConcurrency)
-	err = Scan(segmentScanner)
+	err = ScanStorage(segmentScanner)
 	if _, ok := err.(ReachedZeroSegmentError); !ok {
-		tracelog.ErrorLogger.FatalfOnError("Failed to do WAL segments scan %v", err)
+		tracelog.ErrorLogger.FatalfOnError("Failed to perform WAL segments scan %v", err)
 	}
-	printWalVerifyReport(segmentScanner.missingSegments, segmentScanner.existingSegments)
+	printWalVerifyReport(segmentScanner.scannedSegments)
 }
 
-func printWalVerifyReport(missingSegments []*MissingSegmentDescription, existingSegments []*WalSegmentDescription) {
-	existingSequences := make([]*WalSegmentsSequence, 0)
-	currentSequence := NewSegmentsSequence(existingSegments[0].timeline, existingSegments[0].number)
-	for _, segment := range existingSegments[1:] {
-		if currentSequence.timelineId != segment.timeline || currentSequence.minSegmentNo != segment.number.next() {
-			existingSequences = append(existingSequences, currentSequence)
-			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
-		} else {
-			currentSequence.AddWalSegmentNo(segment.number)
-		}
-	}
-	fmt.Println("EXISTING SEGMENTS SEQ:")
-	printSequences(existingSequences)
-	missingSequences := make([]*WalSegmentsSequence, 0)
-	currentSequence = NewSegmentsSequence(missingSegments[0].timeline, missingSegments[0].number)
-	currentStatus := missingSegments[0].status
-	for _, segment := range missingSegments[1:] {
-		if segment.status != currentStatus {
-			fmt.Println(segment.status.String() +  " SEGMENTS:")
-			printSequences(missingSequences)
-			missingSequences = make([]*WalSegmentsSequence, 0)
-			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
-			currentStatus = segment.status
-		}
-
-		if currentSequence.timelineId != segment.timeline ||
-			currentSequence.minSegmentNo != segment.number.next() {
-			missingSequences = append(missingSequences, currentSequence)
+func printWalVerifyReport(scannedSegments []*ScannedSegmentDescription) {
+	currentSequence := NewSegmentsSequence(scannedSegments[0].timeline, scannedSegments[0].number)
+	currentStatus := scannedSegments[0].status
+	for _, segment := range scannedSegments[1:] {
+		if segment.status != currentStatus ||
+			currentSequence.timelineId != segment.timeline ||
+			currentSequence.minSegmentNo != segment.number.next(){
+			printSequence(currentSequence, currentStatus)
 			currentSequence = NewSegmentsSequence(segment.timeline, segment.number)
 			currentStatus = segment.status
 		} else {
 			currentSequence.AddWalSegmentNo(segment.number)
 		}
 	}
-	fmt.Println(currentStatus.String() +  " SEGMENTS:")
-	printSequences(missingSequences)
+	printSequence(currentSequence, currentStatus)
 }
 
-func Scan(scanner *WalSegmentsScanner) error {
+func ScanStorage(scanner *WalSegmentsScanner) error {
 	// Run to the latest WAL segment available in storage
 	scanConfig := SegmentScanConfig{
-		infiniteScan: true,
+		unlimitedScan:           true,
 		stopOnFirstFoundSegment: true,
-		missingSegmentHandleFunc: scanner.addDelayedMissingSegment,
+		missingSegmentHandler:   scanner.addDelayedMissingSegment,
 	}
-	err := scanner.scanSegments(scanConfig)
+	err := scanner.Scan(scanConfig)
 	if err != nil {
 		return err
 	}
@@ -127,31 +106,29 @@ func Scan(scanner *WalSegmentsScanner) error {
 	// New startSegment might be chosen if there is some skipped segments after current startSegment
 	// because we need a continuous sequence
 	scanConfig = SegmentScanConfig{
-		scanSegmentsCount: scanner.uploadingSegmentRangeSize,
+		scanSegmentsLimit:       scanner.uploadingSegmentRangeSize,
 		stopOnFirstFoundSegment: true,
-		missingSegmentHandleFunc: scanner.addUploadingMissingSegment,
+		missingSegmentHandler:   scanner.addUploadingMissingSegment,
 	}
-	err = scanner.scanSegments(scanConfig)
+	err = scanner.Scan(scanConfig)
 	if err != nil {
 		return err
 	}
 
 	scanConfig = SegmentScanConfig{
-		infiniteScan: true,
-		missingSegmentHandleFunc: scanner.addLostMissingSegment,
+		unlimitedScan:         true,
+		missingSegmentHandler: scanner.addLostMissingSegment,
 	}
 	// Run to the first storage WAL segment (in sequence)
-	return scanner.scanSegments(scanConfig)
+	return scanner.Scan(scanConfig)
 }
 
-func printSequences(sequences []*WalSegmentsSequence) {
-	for _, seq := range sequences {
-		tracelog.InfoLogger.Printf("TL %d [%s, %s]\n",
+func printSequence(seq *WalSegmentsSequence, status ScannedSegmentStatus) {
+	tracelog.InfoLogger.Printf("TL %d [%s, %s] STATUS %s\n",
 			seq.timelineId,
 			seq.minSegmentNo.getFilename(seq.timelineId),
 			seq.maxSegmentNo.getFilename(seq.timelineId),
-			)
-	}
+			status.String())
 }
 
 // get the current wal segment number of the cluster

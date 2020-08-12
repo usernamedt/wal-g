@@ -50,6 +50,7 @@ func (desc *WalSegmentDescription) GetFileName() string {
 }
 
 // WalSegmentRunner is used for sequential iteration over WAL segments in the storage
+// in reversed chronological order
 type WalSegmentRunner struct {
 	switchTimelines    bool
 	currentWalSegment  *WalSegmentDescription

@@ -104,10 +104,10 @@ func (data *WalSegmentsSequence) FindMissingSegments() ([]*WalSegmentDescription
 		walSegments, data.minSegmentNo)
 	walSegmentScanner := NewWalSegmentsScanner(walSegmentRunner, 0)
 	scanConfig := SegmentScanConfig{
-		infiniteScan: true,
-		missingSegmentHandleFunc: walSegmentScanner.addLostMissingSegment,
+		unlimitedScan:         true,
+		missingSegmentHandler: walSegmentScanner.addLostMissingSegment,
 	}
-	err :=walSegmentScanner.scanSegments(scanConfig)
+	err :=walSegmentScanner.Scan(scanConfig)
 	if _, ok := err.(ReachedZeroSegmentError); !ok {
 		tracelog.ErrorLogger.FatalfOnError("Failed to do WAL segments scan %v", err)
 	}
