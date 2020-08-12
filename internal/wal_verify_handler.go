@@ -126,8 +126,8 @@ func ScanStorage(scanner *WalSegmentsScanner) error {
 func printSequence(seq *WalSegmentsSequence, status ScannedSegmentStatus) {
 	tracelog.InfoLogger.Printf("TL %d [%s, %s] STATUS %s\n",
 			seq.timelineId,
-			seq.minSegmentNo.getFilename(seq.timelineId),
 			seq.maxSegmentNo.getFilename(seq.timelineId),
+			seq.minSegmentNo.getFilename(seq.timelineId),
 			status.String())
 }
 
