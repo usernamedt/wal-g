@@ -100,7 +100,7 @@ func (seq *WalSegmentsSequence) FindMissingSegments() ([]WalSegmentDescription, 
 	}
 
 	// create WAL segment runner to run on single timeline
-	walSegmentRunner := NewWalSegmentRunner(startWalSegment, walSegments, seq.minSegmentNo)
+	walSegmentRunner := NewWalSegmentRunner(startWalSegment, walSegments, seq.minSegmentNo, nil)
 	missingSegments := make([]WalSegmentDescription, 0)
 	for {
 		if _, err := walSegmentRunner.Next(); err != nil {
