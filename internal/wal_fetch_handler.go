@@ -221,7 +221,7 @@ func putCachedDecompressorInFirstPlace(decompressors []compression.Decompressor)
 }
 
 // TODO : unit tests
-func DownloadAndDecompressWALFile(folder storage.Folder, walFileName string) (io.ReadCloser, error) {
+func DownloadAndDecompressStorageFile(folder storage.Folder, walFileName string) (io.ReadCloser, error) {
 	for _, decompressor := range putCachedDecompressorInFirstPlace(compression.Decompressors) {
 		archiveReader, exists, err := TryDownloadFile(folder, walFileName+"."+decompressor.FileExtension())
 		if err != nil {
@@ -244,7 +244,7 @@ func DownloadAndDecompressWALFile(folder storage.Folder, walFileName string) (io
 // TODO : unit tests
 // downloadWALFileTo downloads a file and writes it to local file
 func DownloadWALFileTo(folder storage.Folder, walFileName string, dstPath string) error {
-	reader, err := DownloadAndDecompressWALFile(folder, walFileName)
+	reader, err := DownloadAndDecompressStorageFile(folder, walFileName)
 	if err != nil {
 		return err
 	}
