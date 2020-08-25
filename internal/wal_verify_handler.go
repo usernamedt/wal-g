@@ -31,7 +31,7 @@ type WalIntegrityReportRow struct {
 	StartSegment  string               `json:"start_segment"`
 	EndSegment    string               `json:"end_segment"`
 	SegmentsCount int                  `json:"segments_count"`
-	Status        ScannedSegmentStatus `json:"Status"`
+	Status        ScannedSegmentStatus `json:"status"`
 }
 
 func newWalIntegrityReportRow(sequence *WalSegmentsSequence, status ScannedSegmentStatus) *WalIntegrityReportRow {
@@ -77,7 +77,7 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescri
 	storageSegments := getSegmentsFromFiles(storageFileNames)
 	timelineSwitchMap, err := createTimelineSwitchMap(startWalSegment.Timeline, walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to initialize timeline history map %v", err)
-	walSegmentRunner := NewWalSegmentRunner(startWalSegment, storageSegments, 0, timelineSwitchMap)
+	walSegmentRunner := NewWalSegmentRunner(startWalSegment, storageSegments, 1, timelineSwitchMap)
 
 	// maxConcurrency is needed to determine max amount of missing WAL segments
 	// after the last found WAL segment which can be skipped ("uploading" segment sequence size)
