@@ -11,9 +11,13 @@ import (
 type ScannedSegmentStatus int
 
 const (
+	// Surely lost missing segment
 	Lost ScannedSegmentStatus = iota + 1
+	// Missing but probably still uploading segment
 	ProbablyUploading
+	// Missing but probably delayed segment
 	ProbablyDelayed
+	// Segment exists in storage
 	Found
 )
 
@@ -23,10 +27,10 @@ type ScannedSegmentDescription struct {
 }
 
 func (status ScannedSegmentStatus) String() string {
-	return [...]string{"", "Lost", "ProbablyUploading", "ProbablyDelayed", "Found"}[status]
+	return [...]string{"", "MISSING_LOST", "MISSING_UPLOADING", "MISSING_DELAYED", "FOUND"}[status]
 }
 
-type WalIntegrityReportRow struct {
+type WalIntegrityScanResultRow struct {
 	TimelineId    uint32               `json:"timeline_id"`
 	StartSegment  string               `json:"start_segment"`
 	EndSegment    string               `json:"end_segment"`
@@ -34,8 +38,8 @@ type WalIntegrityReportRow struct {
 	Status        ScannedSegmentStatus `json:"status"`
 }
 
-func newWalIntegrityReportRow(sequence *WalSegmentsSequence, status ScannedSegmentStatus) *WalIntegrityReportRow {
-	return &WalIntegrityReportRow{
+func newWalIntegrityScanResultRow(sequence *WalSegmentsSequence, status ScannedSegmentStatus) *WalIntegrityScanResultRow {
+	return &WalIntegrityScanResultRow{
 		TimelineId:    sequence.timelineId,
 		StartSegment:  sequence.minSegmentNo.getFilename(sequence.timelineId),
 		EndSegment:    sequence.maxSegmentNo.getFilename(sequence.timelineId),
@@ -85,17 +89,54 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescri
 	tracelog.ErrorLogger.FatalOnError(err)
 
 	segmentScanner := NewWalSegmentsScanner(walSegmentRunner, maxConcurrency)
-	err = segmentScanner.ScanStorage()
+	err = runWalIntegrityScan(segmentScanner)
 	tracelog.ErrorLogger.FatalfOnError("Failed to perform WAL segments scan %v", err)
 
-	consistencyReport, err := createIntegrityReport(segmentScanner.scannedSegments)
+	integrityReport, err := createIntegrityScanResult(segmentScanner.scannedSegments)
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	err = outputWriter.Write(consistencyReport)
+	err = outputWriter.Write(integrityReport)
 	tracelog.ErrorLogger.FatalOnError(err)
 }
 
-func createIntegrityReport(scannedSegments []ScannedSegmentDescription) ([]*WalIntegrityReportRow, error) {
+// runWalIntegrityScan invokes three storage scan series:
+// 1. At first, it runs scan until it finds some segment in WAL storage
+// and marks all encountered missing segments as "missing, probably delayed"
+// 2. Then it scans exactly uploadingSegmentRangeSize count of segments,
+// if found any missing segments it marks them as "missing, probably still uploading"
+// 3. Final scan without any limit (until stopSegment is reached),
+// all missing segments encountered in this scan are considered as "missing, lost"
+func runWalIntegrityScan(scanner *WalSegmentsScanner) error {
+	// Run to the latest WAL segment available in storage, mark all missing segments as delayed
+	err := scanner.scan(SegmentScanConfig{
+		unlimitedScan:           true,
+		stopOnFirstFoundSegment: true,
+		missingSegmentHandler:   scanner.addMissingDelayedSegment,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Traverse potentially uploading segments, mark all missing segments as probably uploading
+	err = scanner.scan(SegmentScanConfig{
+		scanSegmentsLimit:       scanner.uploadingSegmentRangeSize,
+		stopOnFirstFoundSegment: true,
+		missingSegmentHandler:   scanner.addMissingUploadingSegment,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Run until stop segment, and mark all missing segments as lost
+	return scanner.scan(SegmentScanConfig{
+		unlimitedScan:         true,
+		missingSegmentHandler: scanner.addMissingLostSegment,
+	})
+}
+
+// createIntegrityScanResult groups scanned segments
+// with the same timeline and status into segment sequences to minify the output
+func createIntegrityScanResult(scannedSegments []ScannedSegmentDescription) ([]*WalIntegrityScanResultRow, error) {
 	if len(scannedSegments) == 0 {
 		return nil, nil
 	}
@@ -105,7 +146,7 @@ func createIntegrityReport(scannedSegments []ScannedSegmentDescription) ([]*WalI
 		return scannedSegments[i].Number < scannedSegments[j].Number
 	})
 
-	report := make([]*WalIntegrityReportRow, 0)
+	scanResultRows := make([]*WalIntegrityScanResultRow, 0)
 	currentSequence := NewSegmentsSequence(scannedSegments[0].Timeline, scannedSegments[0].Number)
 	currentStatus := scannedSegments[0].status
 
@@ -114,7 +155,7 @@ func createIntegrityReport(scannedSegments []ScannedSegmentDescription) ([]*WalI
 
 		// switch to the new sequence on segment Status change or timeline id change
 		if segment.status != currentStatus || currentSequence.timelineId != segment.Timeline {
-			report = append(report, newWalIntegrityReportRow(currentSequence, currentStatus))
+			scanResultRows = append(scanResultRows, newWalIntegrityScanResultRow(currentSequence, currentStatus))
 			currentSequence = NewSegmentsSequence(segment.Timeline, segment.Number)
 			currentStatus = segment.status
 		} else {
@@ -122,8 +163,8 @@ func createIntegrityReport(scannedSegments []ScannedSegmentDescription) ([]*WalI
 		}
 	}
 
-	report = append(report, newWalIntegrityReportRow(currentSequence, currentStatus))
-	return report, nil
+	scanResultRows = append(scanResultRows, newWalIntegrityScanResultRow(currentSequence, currentStatus))
+	return scanResultRows, nil
 }
 
 // get the current wal segment number of the cluster

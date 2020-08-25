@@ -15,7 +15,7 @@ const (
 
 // WalVerifyOutputWriter writes the output of wal-verify command execution result
 type WalVerifyOutputWriter interface {
-	Write(integrityReport []*WalIntegrityReportRow) error
+	Write(scanResult []*WalIntegrityScanResultRow) error
 }
 
 // WalVerifyJsonOutputWriter writes the detailed JSON output
@@ -23,8 +23,8 @@ type WalVerifyJsonOutputWriter struct {
 	output io.Writer
 }
 
-func (writer *WalVerifyJsonOutputWriter) Write(integrityReport []*WalIntegrityReportRow) error {
-	bytes, err := json.Marshal(integrityReport)
+func (writer *WalVerifyJsonOutputWriter) Write(scanResult []*WalIntegrityScanResultRow) error {
+	bytes, err := json.Marshal(scanResult)
 	if err != nil {
 		return err
 	}
@@ -37,13 +37,13 @@ type WalVerifyTableOutputWriter struct {
 	output io.Writer
 }
 
-func (writer *WalVerifyTableOutputWriter) Write(integrityReport []*WalIntegrityReportRow) error {
+func (writer *WalVerifyTableOutputWriter) Write(scanResult []*WalIntegrityScanResultRow) error {
 	tableWriter := table.NewWriter()
 	tableWriter.SetOutputMirror(writer.output)
 	defer tableWriter.Render()
 	tableWriter.AppendHeader(table.Row{"TLI", "Start",	"End", "Segments count", "Status"})
 
-	for _, row := range integrityReport {
+	for _, row := range scanResult {
 		tableWriter.AppendRow(table.Row{row.TimelineId , row.StartSegment, row.EndSegment, row.SegmentsCount, row.Status})
 	}
 	return nil

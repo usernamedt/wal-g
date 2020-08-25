@@ -2,6 +2,14 @@ package internal
 
 import "github.com/wal-g/tracelog"
 
+// WalSegmentsScanner is used to scan the WAL segments storage
+type WalSegmentsScanner struct {
+	scannedSegments           []ScannedSegmentDescription
+	walSegmentRunner          *WalSegmentRunner
+	uploadingSegmentRangeSize int
+}
+
+// SegmentScanConfig is used to configure the single scan() call of the WalSegmentsScanner
 type SegmentScanConfig struct {
 	unlimitedScan bool
 	// scanSegmentsLimit is used in case of unlimitedScan set to false
@@ -9,12 +17,6 @@ type SegmentScanConfig struct {
 	stopOnFirstFoundSegment bool
 
 	missingSegmentHandler func(segment WalSegmentDescription)
-}
-
-type WalSegmentsScanner struct {
-	scannedSegments           []ScannedSegmentDescription
-	walSegmentRunner          *WalSegmentRunner
-	uploadingSegmentRangeSize int
 }
 
 func NewWalSegmentsScanner(walSegmentRunner *WalSegmentRunner, uploadingSegmentRangeSize int) *WalSegmentsScanner {
@@ -26,32 +28,28 @@ func NewWalSegmentsScanner(walSegmentRunner *WalSegmentRunner, uploadingSegmentR
 	}
 }
 
-func (scanner *WalSegmentsScanner) ScanStorage() error {
-	// Run to the latest WAL segment available in storage, mark all missing segments as delayed
-	err := scanner.scan(SegmentScanConfig{
-		unlimitedScan:           true,
-		stopOnFirstFoundSegment: true,
-		missingSegmentHandler:   scanner.addMissingDelayedSegment,
-	})
-	if err != nil {
-		return err
+func (scanner *WalSegmentsScanner) scan(config SegmentScanConfig) error {
+	// scan may have a limited number of iterations, or may be unlimited
+	for i := 0; config.unlimitedScan || i < config.scanSegmentsLimit; i++ {
+		currentSegment, err := scanner.walSegmentRunner.Next()
+		if err != nil {
+			switch err := err.(type) {
+			case WalSegmentNotFoundError:
+				scanner.walSegmentRunner.ForceMoveNext()
+				config.missingSegmentHandler(scanner.walSegmentRunner.Current())
+				continue
+			case ReachedStopSegmentError:
+				return nil
+			default:
+				return err
+			}
+		}
+		scanner.addFoundSegment(currentSegment)
+		if config.stopOnFirstFoundSegment {
+			return nil
+		}
 	}
-
-	// Traverse potentially uploading segments, mark all missing segments as probably uploading
-	err = scanner.scan(SegmentScanConfig{
-		scanSegmentsLimit:       scanner.uploadingSegmentRangeSize,
-		stopOnFirstFoundSegment: true,
-		missingSegmentHandler:   scanner.addMissingUploadingSegment,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Run until stop segment, and mark all missing segments as lost
-	return scanner.scan(SegmentScanConfig{
-		unlimitedScan:         true,
-		missingSegmentHandler: scanner.addMissingLostSegment,
-	})
+	return nil
 }
 
 func (scanner *WalSegmentsScanner) addFoundSegment(description WalSegmentDescription) {
@@ -79,35 +77,4 @@ func (scanner *WalSegmentsScanner) addMissingDelayedSegment(description WalSegme
 		scanner.walSegmentRunner.Current().GetFileName())
 	missingSegment := ScannedSegmentDescription{description, ProbablyDelayed}
 	scanner.scannedSegments = append(scanner.scannedSegments, missingSegment)
-}
-
-func (scanner *WalSegmentsScanner) scan(config SegmentScanConfig) error {
-	for i := 0; config.unlimitedScan || i < config.scanSegmentsLimit; i++ {
-		currentSegment, err := scanner.walSegmentRunner.Next()
-		if err != nil {
-			switch err := err.(type) {
-			case WalSegmentNotFoundError:
-				scanner.walSegmentRunner.ForceMoveNext()
-				config.missingSegmentHandler(scanner.walSegmentRunner.Current())
-				continue
-			case ReachedStopSegmentError:
-				return nil
-			default:
-				return err
-			}
-		}
-		scanner.addFoundSegment(currentSegment)
-		if config.stopOnFirstFoundSegment {
-			return nil
-		}
-	}
-	return nil
-}
-
-func (scanner *WalSegmentsScanner) GetMissingSegmentsDescriptions() []WalSegmentDescription {
-	result := make([]WalSegmentDescription, 0, len(scanner.scannedSegments))
-	for _, segment := range scanner.scannedSegments {
-		result = append(result, segment.WalSegmentDescription)
-	}
-	return result
 }
