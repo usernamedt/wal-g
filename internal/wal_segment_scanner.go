@@ -27,7 +27,7 @@ func NewWalSegmentsScanner(walSegmentRunner *WalSegmentRunner, uploadingSegmentR
 }
 
 func (scanner *WalSegmentsScanner) ScanStorage() error {
-	// Run to the latest WAL segment available in storage
+	// Run to the latest WAL segment available in storage, mark all missing segments as delayed
 	err := scanner.scan(SegmentScanConfig{
 		unlimitedScan:           true,
 		stopOnFirstFoundSegment: true,
@@ -37,8 +37,7 @@ func (scanner *WalSegmentsScanner) ScanStorage() error {
 		return err
 	}
 
-	// New startSegment might be chosen if there is some skipped segments after current startSegment
-	// because we need a continuous sequence
+	// Traverse potentially uploading segments, mark all missing segments as probably uploading
 	err = scanner.scan(SegmentScanConfig{
 		scanSegmentsLimit:       scanner.uploadingSegmentRangeSize,
 		stopOnFirstFoundSegment: true,
@@ -48,7 +47,7 @@ func (scanner *WalSegmentsScanner) ScanStorage() error {
 		return err
 	}
 
-	// Run to the first storage WAL segment (in sequence)
+	// Run until stop segment, and mark all missing segments as lost
 	return scanner.scan(SegmentScanConfig{
 		unlimitedScan:         true,
 		missingSegmentHandler: scanner.addMissingLostSegment,

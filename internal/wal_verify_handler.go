@@ -26,9 +26,22 @@ func (status ScannedSegmentStatus) String() string {
 	return [...]string{"", "Lost", "ProbablyUploading", "ProbablyDelayed", "Found"}[status]
 }
 
-type WalConsistencyScanReportRow struct {
-	WalSegmentsSequence
-	ScannedSegmentStatus
+type WalIntegrityReportRow struct {
+	TimelineId    uint32               `json:"timeline_id"`
+	StartSegment  string               `json:"start_segment"`
+	EndSegment    string               `json:"end_segment"`
+	SegmentsCount int                  `json:"segments_count"`
+	Status        ScannedSegmentStatus `json:"Status"`
+}
+
+func newWalIntegrityReportRow(sequence *WalSegmentsSequence, status ScannedSegmentStatus) *WalIntegrityReportRow {
+	return &WalIntegrityReportRow{
+		TimelineId:    sequence.timelineId,
+		StartSegment:  sequence.minSegmentNo.getFilename(sequence.timelineId),
+		EndSegment:    sequence.maxSegmentNo.getFilename(sequence.timelineId),
+		Status:        status,
+		SegmentsCount: len(sequence.walSegmentNumbers),
+	}
 }
 
 // QueryCurrentWalSegment() gets start WAL segment from Postgres cluster
@@ -55,7 +68,8 @@ func QueryCurrentWalSegment() WalSegmentDescription {
 // HandleWalVerify queries the current cluster WAL segment and timeline
 // and travels through WAL segments in storage in reversed chronological order (starting from that segment)
 // to find any missing WAL segments that could potentially fail the PITR procedure
-func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescription) {
+func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescription, outputWriter WalVerifyOutputWriter) {
+	tracelog.InfoLogger.Printf("Received start WAL segment: %s", startWalSegment.GetFileName())
 	walFolder := rootFolder.GetSubFolder(utility.WalPath)
 	storageFileNames, err := getFolderFilenames(walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to get WAL folder filenames %v", err)
@@ -70,18 +84,20 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescri
 	maxConcurrency, err := getMaxUploadConcurrency()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	tracelog.InfoLogger.Printf("Start WAL segment: %s", startWalSegment.GetFileName())
-
 	segmentScanner := NewWalSegmentsScanner(walSegmentRunner, maxConcurrency)
 	err = segmentScanner.ScanStorage()
 	tracelog.ErrorLogger.FatalfOnError("Failed to perform WAL segments scan %v", err)
-	
-	printWalVerifyReport(segmentScanner.scannedSegments)
+
+	consistencyReport, err := createIntegrityReport(segmentScanner.scannedSegments)
+	tracelog.ErrorLogger.FatalOnError(err)
+
+	err = outputWriter.Write(consistencyReport)
+	tracelog.ErrorLogger.FatalOnError(err)
 }
 
-func printWalVerifyReport(scannedSegments []ScannedSegmentDescription) {
+func createIntegrityReport(scannedSegments []ScannedSegmentDescription) ([]*WalIntegrityReportRow, error) {
 	if len(scannedSegments) == 0 {
-		return
+		return nil, nil
 	}
 
 	// scannedSegments are expected to be ordered by segment No
@@ -89,16 +105,16 @@ func printWalVerifyReport(scannedSegments []ScannedSegmentDescription) {
 		return scannedSegments[i].Number < scannedSegments[j].Number
 	})
 
-	output := make([]*WalConsistencyScanReportRow, 0)
+	report := make([]*WalIntegrityReportRow, 0)
 	currentSequence := NewSegmentsSequence(scannedSegments[0].Timeline, scannedSegments[0].Number)
 	currentStatus := scannedSegments[0].status
 
 	for i := 1; i < len(scannedSegments); i++ {
 		segment := scannedSegments[i]
 
-		// switch to the new sequence on segment status change or timeline id change
+		// switch to the new sequence on segment Status change or timeline id change
 		if segment.status != currentStatus || currentSequence.timelineId != segment.Timeline {
-			output = append(output, &WalConsistencyScanReportRow{*currentSequence, currentStatus})
+			report = append(report, newWalIntegrityReportRow(currentSequence, currentStatus))
 			currentSequence = NewSegmentsSequence(segment.Timeline, segment.Number)
 			currentStatus = segment.status
 		} else {
@@ -106,18 +122,8 @@ func printWalVerifyReport(scannedSegments []ScannedSegmentDescription) {
 		}
 	}
 
-	output = append(output, &WalConsistencyScanReportRow{*currentSequence, currentStatus})
-	for _, row := range output {
-		printSequence(row)
-	}
-}
-
-func printSequence(row *WalConsistencyScanReportRow) {
-	tracelog.InfoLogger.Printf("TL %d [%s, %s] STATUS %s\n",
-		row.timelineId,
-		row.maxSegmentNo.getFilename(row.timelineId),
-		row.minSegmentNo.getFilename(row.timelineId),
-		row.ScannedSegmentStatus)
+	report = append(report, newWalIntegrityReportRow(currentSequence, currentStatus))
+	return report, nil
 }
 
 // get the current wal segment number of the cluster

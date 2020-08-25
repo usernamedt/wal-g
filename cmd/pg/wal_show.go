@@ -30,7 +30,7 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			folder, err := internal.ConfigureFolder()
 			tracelog.ErrorLogger.FatalOnError(err)
-			outputType := internal.TableOutput
+			outputType := internal.WalShowTableOutput
 			if detailedJsonOutput {
 				outputType = internal.JsonOutput
 			}

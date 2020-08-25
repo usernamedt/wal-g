@@ -9,7 +9,7 @@ import (
 type WalShowOutputType int
 
 const (
-	TableOutput WalShowOutputType = iota + 1
+	WalShowTableOutput WalShowOutputType = iota + 1
 	JsonOutput
 )
 
@@ -64,7 +64,7 @@ func (writer *WalShowTableOutputWriter) Write(timelineInfos []*TimelineInfo) err
 
 func NewWalShowOutputWriter(outputType WalShowOutputType, output io.Writer, includeBackups bool) WalShowOutputWriter {
 	switch outputType {
-	case TableOutput:
+	case WalShowTableOutput:
 		return &WalShowTableOutputWriter{output: output, includeBackups: includeBackups}
 	case JsonOutput:
 		return &WalShowJsonOutputWriter{output: output}
