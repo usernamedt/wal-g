@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/jackc/pgx"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
@@ -30,12 +32,57 @@ func (status ScannedSegmentStatus) String() string {
 	return [...]string{"", "MISSING_LOST", "MISSING_UPLOADING", "MISSING_DELAYED", "FOUND"}[status]
 }
 
+// MarshalJSON marshals the ScannedSegmentStatus enum as a quoted json string
+func (status ScannedSegmentStatus) MarshalJSON() ([]byte, error) {
+	return marshalEnumToJSON(status)
+}
+
+type WalStorageStatus int
+
+const (
+	// No missing segments in storage
+	Ok WalStorageStatus = iota + 1
+	// Storage contains some ProbablyUploading or ProbablyDelayed missing segments
+	Warning
+	// Storage contains lost missing segments
+	Failure
+)
+
+func (storageStatus WalStorageStatus) String() string {
+	return [...]string{"", "OK", "WARNING", "FAILURE"}[storageStatus]
+}
+
+// MarshalJSON marshals the WalStorageStatus enum as a quoted json string
+func (storageStatus WalStorageStatus) MarshalJSON() ([]byte, error) {
+	return marshalEnumToJSON(storageStatus)
+}
+
+type WalVerifyResult struct {
+	StorageStatus       WalStorageStatus             `json:"storage_status,string"`
+	IntegrityScanResult []*WalIntegrityScanResultRow `json:"integrity_scan_result"`
+}
+
+func newWalVerifyResult(integrityScanResults []*WalIntegrityScanResultRow) WalVerifyResult {
+	walVerifyResult := WalVerifyResult{StorageStatus: Ok, IntegrityScanResult: integrityScanResults}
+	for _, row := range integrityScanResults {
+		switch row.Status {
+		case Lost:
+			walVerifyResult.StorageStatus = Failure
+			return walVerifyResult
+		case ProbablyUploading:
+		case ProbablyDelayed:
+			walVerifyResult.StorageStatus = Warning
+		}
+	}
+	return walVerifyResult
+}
+
 type WalIntegrityScanResultRow struct {
 	TimelineId    uint32               `json:"timeline_id"`
 	StartSegment  string               `json:"start_segment"`
 	EndSegment    string               `json:"end_segment"`
 	SegmentsCount int                  `json:"segments_count"`
-	Status        ScannedSegmentStatus `json:"status"`
+	Status        ScannedSegmentStatus `json:"status,string"`
 }
 
 func newWalIntegrityScanResultRow(sequence *WalSegmentsSequence, status ScannedSegmentStatus) *WalIntegrityScanResultRow {
@@ -73,7 +120,6 @@ func QueryCurrentWalSegment() WalSegmentDescription {
 // and travels through WAL segments in storage in reversed chronological order (starting from that segment)
 // to find any missing WAL segments that could potentially fail the PITR procedure
 func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescription, outputWriter WalVerifyOutputWriter) {
-	tracelog.InfoLogger.Printf("Received start WAL segment: %s", startWalSegment.GetFileName())
 	walFolder := rootFolder.GetSubFolder(utility.WalPath)
 	storageFileNames, err := getFolderFilenames(walFolder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to get WAL folder filenames %v", err)
@@ -88,27 +134,27 @@ func HandleWalVerify(rootFolder storage.Folder, startWalSegment WalSegmentDescri
 	maxConcurrency, err := getMaxUploadConcurrency()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	segmentScanner := NewWalSegmentsScanner(walSegmentRunner, maxConcurrency)
-	err = runWalIntegrityScan(segmentScanner)
+	segmentScanner := NewWalSegmentScanner(walSegmentRunner)
+	err = runWalIntegrityScan(segmentScanner, maxConcurrency)
 	tracelog.ErrorLogger.FatalfOnError("Failed to perform WAL segments scan %v", err)
 
-	integrityReport, err := createIntegrityScanResult(segmentScanner.scannedSegments)
+	integrityReport, err := createWalVerifyResult(segmentScanner.scannedSegments)
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	err = outputWriter.Write(integrityReport)
+	err = outputWriter.Write(newWalVerifyResult(integrityReport))
 	tracelog.ErrorLogger.FatalOnError(err)
 }
 
-// runWalIntegrityScan invokes three storage scan series:
+// runWalIntegrityScan invokes the following storage scan series:
 // 1. At first, it runs scan until it finds some segment in WAL storage
 // and marks all encountered missing segments as "missing, probably delayed"
 // 2. Then it scans exactly uploadingSegmentRangeSize count of segments,
 // if found any missing segments it marks them as "missing, probably still uploading"
 // 3. Final scan without any limit (until stopSegment is reached),
 // all missing segments encountered in this scan are considered as "missing, lost"
-func runWalIntegrityScan(scanner *WalSegmentsScanner) error {
+func runWalIntegrityScan(scanner *WalSegmentScanner, uploadingSegmentRangeSize int) error {
 	// Run to the latest WAL segment available in storage, mark all missing segments as delayed
-	err := scanner.scan(SegmentScanConfig{
+	err := scanner.Scan(SegmentScanConfig{
 		unlimitedScan:           true,
 		stopOnFirstFoundSegment: true,
 		missingSegmentHandler:   scanner.addMissingDelayedSegment,
@@ -118,8 +164,8 @@ func runWalIntegrityScan(scanner *WalSegmentsScanner) error {
 	}
 
 	// Traverse potentially uploading segments, mark all missing segments as probably uploading
-	err = scanner.scan(SegmentScanConfig{
-		scanSegmentsLimit:       scanner.uploadingSegmentRangeSize,
+	err = scanner.Scan(SegmentScanConfig{
+		scanSegmentsLimit:       uploadingSegmentRangeSize,
 		stopOnFirstFoundSegment: true,
 		missingSegmentHandler:   scanner.addMissingUploadingSegment,
 	})
@@ -128,20 +174,21 @@ func runWalIntegrityScan(scanner *WalSegmentsScanner) error {
 	}
 
 	// Run until stop segment, and mark all missing segments as lost
-	return scanner.scan(SegmentScanConfig{
+	return scanner.Scan(SegmentScanConfig{
 		unlimitedScan:         true,
 		missingSegmentHandler: scanner.addMissingLostSegment,
 	})
 }
 
-// createIntegrityScanResult groups scanned segments
+// createWalVerifyResult groups scanned segments
 // with the same timeline and status into segment sequences to minify the output
-func createIntegrityScanResult(scannedSegments []ScannedSegmentDescription) ([]*WalIntegrityScanResultRow, error) {
+// and determines WAL storage status
+func createWalVerifyResult(scannedSegments []ScannedSegmentDescription) ([]*WalIntegrityScanResultRow, error) {
 	if len(scannedSegments) == 0 {
 		return nil, nil
 	}
 
-	// scannedSegments are expected to be ordered by segment No
+	// make sure that scannedSegments are ordered
 	sort.Slice(scannedSegments, func(i, j int) bool {
 		return scannedSegments[i].Number < scannedSegments[j].Number
 	})
@@ -187,4 +234,11 @@ func getCurrentTimeline(conn *pgx.Conn) (uint32, error) {
 		return 0, err
 	}
 	return timeline, nil
+}
+
+// marshalEnumToJSON is used to write the string enum representation
+// instead of int enum value to JSON
+func marshalEnumToJSON(enum fmt.Stringer) ([]byte, error) {
+	buffer := bytes.NewBufferString(fmt.Sprintf(`"%s"`, enum))
+	return buffer.Bytes(), nil
 }
