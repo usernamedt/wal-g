@@ -26,7 +26,11 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			uploader, err := internal.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
-			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, useRatingComposer)
+			tarBallComposerType := internal.RegularComposer
+			if useRatingComposer {
+				tarBallComposerType = internal.RatingComposer
+			}
+			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, tarBallComposerType)
 		},
 	}
 	permanent  = false

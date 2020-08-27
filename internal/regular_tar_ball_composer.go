@@ -34,6 +34,19 @@ func NewRegularTarBallComposer(
 	}
 }
 
+type RegularTarBallComposerMaker struct {
+}
+
+func NewRegularTarBallComposerMaker() *RegularTarBallComposerMaker {
+	return &RegularTarBallComposerMaker{}
+}
+
+func (maker *RegularTarBallComposerMaker) Make(bundle *Bundle) (TarBallComposer, error) {
+	bundleFiles := &RegularBundleFiles{}
+	tarBallFilePacker := newTarBallFilePacker(bundle.DeltaMap, bundle.IncrementFromLsn, bundleFiles)
+	return NewRegularTarBallComposer(bundle.TarBallQueue, tarBallFilePacker, bundleFiles, bundle.Crypter), nil
+}
+
 func (c *RegularTarBallComposer) AddFile(info *ComposeFileInfo) {
 	tarBall := c.tarBallQueue.Deque()
 	tarBall.SetUp(c.crypter)

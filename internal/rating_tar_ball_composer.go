@@ -11,6 +11,31 @@ import (
 	"sync"
 )
 
+type RatingTarBallComposerMaker struct {
+	fileStats RelFileStatistics
+	bundleFiles BundleFiles
+}
+
+func NewRatingTarBallComposerMaker(relFileStats RelFileStatistics) (*RatingTarBallComposerMaker, error) {
+	bundleFiles := newStatBundleFiles(relFileStats)
+	return &RatingTarBallComposerMaker{
+		fileStats: relFileStats,
+		bundleFiles: bundleFiles,
+	}, nil
+}
+
+func (maker *RatingTarBallComposerMaker) Make(bundle *Bundle) (TarBallComposer, error) {
+	composeRatingEvaluator := NewDefaultComposeRatingEvaluator(bundle.IncrementFromFiles)
+	return NewRatingTarBallComposer(uint64(bundle.TarSizeThreshold),
+		composeRatingEvaluator,
+		bundle.IncrementFromLsn,
+		bundle.DeltaMap,
+		bundle.TarBallQueue,
+		bundle.Crypter,
+		maker.fileStats,
+		maker.bundleFiles)
+}
+
 type RatedComposeFileInfo struct {
 	ComposeFileInfo
 	updateRating uint64
