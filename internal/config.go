@@ -31,6 +31,7 @@ const (
 	UseWalDeltaSetting           = "WALG_USE_WAL_DELTA"
 	UseReverseUnpackSetting      = "WALG_USE_REVERSE_UNPACK"
 	SkipRedundantTarsSetting     = "WALG_SKIP_REDUNDANT_TARS"
+	UseRatingComposerSetting     = "WALG_USE_RATING_COMPOSER"
 	LogLevelSetting              = "WALG_LOG_LEVEL"
 	TarSizeThresholdSetting      = "WALG_TAR_SIZE_THRESHOLD"
 	CseKmsIDSetting              = "WALG_CSE_KMS_ID"
@@ -99,6 +100,7 @@ var (
 		TotalBgUploadedLimit:         "32",
 		UseReverseUnpackSetting:      "false",
 		SkipRedundantTarsSetting:     "false",
+		UseRatingComposerSetting:     "false",
 
 		OplogArchiveTimeoutInterval:    "60s",
 		OplogArchiveAfterSize:          "16777216", // 32 << (10 * 2)
@@ -135,6 +137,7 @@ var (
 		NameStreamRestoreCmd:         true,
 		UseReverseUnpackSetting:      true,
 		SkipRedundantTarsSetting:     true,
+		UseRatingComposerSetting:     true,
 
 		// Postgres
 		PgPortSetting:     true,

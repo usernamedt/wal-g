@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"github.com/spf13/viper"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/internal"
 
@@ -27,6 +28,7 @@ var (
 			uploader, err := internal.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
 			tarBallComposerType := internal.RegularComposer
+			useRatingComposer = useRatingComposer || viper.GetBool(internal.UseRatingComposerSetting)
 			if useRatingComposer {
 				tarBallComposerType = internal.RatingComposer
 			}
