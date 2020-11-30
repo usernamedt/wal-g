@@ -40,18 +40,29 @@ type WalVerifyTableOutputWriter struct {
 }
 
 func (writer *WalVerifyTableOutputWriter) Write(result WalVerifyResult) error {
-	writer.writeTable(result)
-	fmt.Println("WAL storage status: " + result.StorageStatus.String())
+	fmt.Printf("[WAL segments verification] Status: %s\n", result.WalIntegrityCheckResult.Status)
+	fmt.Printf("[WAL segments verification] Details:\n")
+	// write detailed info about WAL integrity scan
+	writer.writeTable(result.WalIntegrityCheckResult.SegmentSequences)
+
+	// write timeline verification result
+	fmt.Printf("[Timeline verification] Status: %s\n",
+		result.TimelineVerifyResult.Status)
+	fmt.Printf("[Timeline verification] Highest timeline found in storage: %d\n",
+		result.TimelineVerifyResult.HighestStorageTimelineId)
+	fmt.Printf("[Timeline verification] Current cluster timeline: %d\n",
+		result.TimelineVerifyResult.CurrentTimelineId)
+
 	return nil
 }
 
-func (writer *WalVerifyTableOutputWriter) writeTable(result WalVerifyResult) {
+func (writer *WalVerifyTableOutputWriter) writeTable(scanResult []*WalIntegrityScanSegmentSequence) {
 	tableWriter := table.NewWriter()
 	tableWriter.SetOutputMirror(writer.output)
 	defer tableWriter.Render()
 	tableWriter.AppendHeader(table.Row{"TLI", "Start", "End", "Segments count", "Status"})
 
-	for _, row := range result.IntegrityScanResult {
+	for _, row := range scanResult {
 		tableWriter.AppendRow(table.Row{row.TimelineId, row.StartSegment, row.EndSegment, row.SegmentsCount, row.Status})
 	}
 }
