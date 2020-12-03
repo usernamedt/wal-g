@@ -1,0 +1,38 @@
+name: Github Actions unit tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install deps
+        run: sudo apt-get install liblzo2-dev
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.15
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Get dependencies
+        run: |
+          go get -v -t -d ./...
+          if [ -f Gopkg.toml ]; then
+           curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+           dep ensure
+          fi
+
+      - name: Test
+        run: make all_unittests
+        env:
+          USE_LIBSODIUM: 1
+          USE_LZO: 1
