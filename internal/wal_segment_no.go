@@ -20,26 +20,26 @@ func newWalSegmentNoFromFilenameNoError(filename string) WalSegmentNo {
 	return WalSegmentNo(no)
 }
 
-func (walSegmentNo WalSegmentNo) next() WalSegmentNo {
-	return walSegmentNo.add(1)
+func (walSegmentNo WalSegmentNo) Next() WalSegmentNo {
+	return walSegmentNo.Add(1)
 }
 
-func (walSegmentNo WalSegmentNo) previous() WalSegmentNo {
-	return walSegmentNo.sub(1)
+func (walSegmentNo WalSegmentNo) Previous() WalSegmentNo {
+	return walSegmentNo.Sub(1)
 }
 
-func (walSegmentNo WalSegmentNo) add(n uint64) WalSegmentNo {
+func (walSegmentNo WalSegmentNo) Add(n uint64) WalSegmentNo {
 	return WalSegmentNo(uint64(walSegmentNo) + n)
 }
 
-func (walSegmentNo WalSegmentNo) sub(n uint64) WalSegmentNo {
+func (walSegmentNo WalSegmentNo) Sub(n uint64) WalSegmentNo {
 	return WalSegmentNo(uint64(walSegmentNo) - n)
 }
 
-func (walSegmentNo WalSegmentNo) firstLsn() uint64 {
+func (walSegmentNo WalSegmentNo) FirstLsn() uint64 {
 	return uint64(walSegmentNo) * WalSegmentSize
 }
 
-func (walSegmentNo WalSegmentNo) getFilename(timeline uint32) string {
+func (walSegmentNo WalSegmentNo) GetFilename(timeline uint32) string {
 	return fmt.Sprintf(walFileFormat, timeline, uint64(walSegmentNo)/xLogSegmentsPerXLogId, uint64(walSegmentNo)%xLogSegmentsPerXLogId)
 }

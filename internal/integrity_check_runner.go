@@ -55,7 +55,7 @@ func NewIntegrityCheckRunner(
 	stopWalSegmentNo, err := getEarliestBackupStartSegmentNo(timelineSwitchMap, currentWalSegment.Timeline, rootFolder)
 	if err != nil {
 		tracelog.WarningLogger.Printf("Failed to detect earliest backup WAL segment no: '%v',"+
-			"will scan until the 000000010000000000000001 segment.\n", err)
+			"will scan until the 0000000X0000000000000001 segment.\n", err)
 		stopWalSegmentNo = 1
 	}
 
@@ -128,12 +128,12 @@ type IntegrityScanSegmentSequence struct {
 	Status        ScannedSegmentStatus `json:"status"`
 }
 
-func newIntegrityScanSegmentSequence(sequence *WalSegmentsSequence,
+func NewIntegrityScanSegmentSequence(sequence *WalSegmentsSequence,
 	status ScannedSegmentStatus) *IntegrityScanSegmentSequence {
 	return &IntegrityScanSegmentSequence{
 		TimelineId:    sequence.timelineId,
-		StartSegment:  sequence.minSegmentNo.getFilename(sequence.timelineId),
-		EndSegment:    sequence.maxSegmentNo.getFilename(sequence.timelineId),
+		StartSegment:  sequence.minSegmentNo.GetFilename(sequence.timelineId),
+		EndSegment:    sequence.maxSegmentNo.GetFilename(sequence.timelineId),
 		Status:        status,
 		SegmentsCount: len(sequence.walSegmentNumbers),
 	}
@@ -195,7 +195,7 @@ func collapseSegmentsByStatusAndTimeline(scannedSegments []ScannedSegmentDescrip
 
 		// switch to the new sequence on segment Status change or timeline id change
 		if segment.status != currentStatus || currentSequence.timelineId != segment.Timeline {
-			segmentSequences = append(segmentSequences, newIntegrityScanSegmentSequence(currentSequence, currentStatus))
+			segmentSequences = append(segmentSequences, NewIntegrityScanSegmentSequence(currentSequence, currentStatus))
 			currentSequence = NewSegmentsSequence(segment.Timeline, segment.Number)
 			currentStatus = segment.status
 		} else {
@@ -203,7 +203,7 @@ func collapseSegmentsByStatusAndTimeline(scannedSegments []ScannedSegmentDescrip
 		}
 	}
 
-	segmentSequences = append(segmentSequences, newIntegrityScanSegmentSequence(currentSequence, currentStatus))
+	segmentSequences = append(segmentSequences, NewIntegrityScanSegmentSequence(currentSequence, currentStatus))
 	return segmentSequences, nil
 }
 

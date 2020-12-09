@@ -47,9 +47,9 @@ func (deltaNo DeltaNo) firstWalSegmentNo() WalSegmentNo {
 }
 
 func (deltaNo DeltaNo) firstLsn() uint64 {
-	return deltaNo.firstWalSegmentNo().firstLsn()
+	return deltaNo.firstWalSegmentNo().FirstLsn()
 }
 
 func (deltaNo DeltaNo) getFilename(timeline uint32) string {
-	return deltaNo.firstWalSegmentNo().getFilename(timeline) + DeltaFilenameSuffix
+	return deltaNo.firstWalSegmentNo().GetFilename(timeline) + DeltaFilenameSuffix
 }

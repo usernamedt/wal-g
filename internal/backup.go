@@ -337,5 +337,5 @@ func GetLastWalFilename(backup *Backup) (string, error) {
 		return "", err
 	}
 	endWalSegmentNo := newWalSegmentNo(meta.FinishLsn - 1)
-	return endWalSegmentNo.getFilename(timelineId), nil
+	return endWalSegmentNo.GetFilename(timelineId), nil
 }

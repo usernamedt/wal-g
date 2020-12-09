@@ -101,7 +101,7 @@ func getWalFilename(lsn uint64, conn *pgx.Conn) (walFilename string, timeline ui
 
 	walSegmentNo := newWalSegmentNo(lsn - 1)
 
-	return walSegmentNo.getFilename(timeline), timeline, nil
+	return walSegmentNo.GetFilename(timeline), timeline, nil
 }
 
 func formatWALFileName(timeline uint32, logSegNo uint64) string {

@@ -8,8 +8,8 @@ import (
 
 func getDeltaMap(folder storage.Folder, timeline uint32, firstUsedLSN, firstNotUsedLSN uint64) (PagedFileDeltaMap, error) {
 	tracelog.InfoLogger.Printf("Timeline: %d, FirstUsedLsn: %d, FirstNotUsedLsn: %d\n", timeline, firstUsedLSN, firstNotUsedLSN)
-	tracelog.InfoLogger.Printf("First WAL should participate in building delta map: %s", newWalSegmentNo(firstUsedLSN).getFilename(timeline))
-	tracelog.InfoLogger.Printf("First WAL shouldn't participate in building delta map: %s", newWalSegmentNo(firstNotUsedLSN).getFilename(timeline))
+	tracelog.InfoLogger.Printf("First WAL should participate in building delta map: %s", newWalSegmentNo(firstUsedLSN).GetFilename(timeline))
+	tracelog.InfoLogger.Printf("First WAL shouldn't participate in building delta map: %s", newWalSegmentNo(firstNotUsedLSN).GetFilename(timeline))
 	deltaMap := NewPagedFileDeltaMap()
 	firstUsedDeltaNo, firstNotUsedDeltaNo := getDeltaRange(firstUsedLSN, firstNotUsedLSN)
 	// Get locations from [firstUsedDeltaNo, lastUsedDeltaNo). We use lastUsedDeltaNo in next step
@@ -44,5 +44,5 @@ func getWalSegmentRange(firstNotUsedDeltaNo DeltaNo, firstNotUsedLsn uint64) (Wa
 	firstUsedWalSegmentNo := firstNotUsedDeltaNo.firstWalSegmentNo()
 	lastUsedLsn := firstNotUsedLsn - 1
 	lastUsedWalSegmentNo := newWalSegmentNo(lastUsedLsn)
-	return firstUsedWalSegmentNo, lastUsedWalSegmentNo.next()
+	return firstUsedWalSegmentNo, lastUsedWalSegmentNo.Next()
 }

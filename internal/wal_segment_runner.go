@@ -40,7 +40,7 @@ type WalSegmentDescription struct {
 }
 
 func (desc WalSegmentDescription) GetFileName() string {
-	return desc.Number.getFilename(desc.Timeline)
+	return desc.Number.GetFilename(desc.Timeline)
 }
 
 // WalSegmentRunner is used for sequential iteration over WAL segments in the storage
@@ -95,7 +95,7 @@ func (r *WalSegmentRunner) getNextSegment() WalSegmentDescription {
 		// switch timeline if current WAL segment number found in .history record
 		nextTimeline = record.timeline
 	}
-	nextSegmentNo := r.currentWalSegment.Number.previous()
+	nextSegmentNo := r.currentWalSegment.Number.Previous()
 	return WalSegmentDescription{Timeline: nextTimeline, Number: nextSegmentNo}
 }
 
