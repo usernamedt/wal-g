@@ -4,5 +4,5 @@ version: 1
 update_configs:
   - package_manager: "go:dep"
     directory: "/"
-    update_schedule: "weekly"
+    update_schedule: "live" #should be weekly, testing
     version_requirement_updates: "increase_versions"
