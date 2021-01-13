@@ -9,6 +9,3 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 1000
-    allow:
-      - dependency-name: "github.com/wal-g/tracelog"
-      - dependency-name: "github.com/wal-g/storages"
