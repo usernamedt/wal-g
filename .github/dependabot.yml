@@ -5,6 +5,7 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "gomod"
+    target-branch: "upstream-master-depbot"
     directory: "/"
     schedule:
       interval: "weekly"
