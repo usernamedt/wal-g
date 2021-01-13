@@ -35,7 +35,7 @@ require (
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/magiconair/properties v1.8.1
 	github.com/mattn/go-runewidth v0.0.8 // indirect
-	github.com/minio/sio v0.2.0
+	github.com/minio/sio v0.2.1
 	github.com/mongodb/mongo-tools-common v2.0.1+incompatible
 	github.com/onsi/ginkgo v1.11.0 // indirect
 	github.com/onsi/gomega v1.8.1 // indirect
@@ -48,7 +48,6 @@ require (
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.5.6
