@@ -24,7 +24,7 @@ require (
 	github.com/golang/mock v1.4.3
 	github.com/golang/snappy v0.0.2-0.20190904063534-ff6b7dc882cf // indirect
 	github.com/google/brotli v1.0.7
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.1.5
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.6.5-0.20200823013804-5db484908cf7
 	github.com/jackc/pglogrepl v0.0.0-20200831220807-35832f1993fb
@@ -48,7 +48,6 @@ require (
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.5.6
