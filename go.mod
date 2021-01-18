@@ -7,7 +7,7 @@ require (
 	github.com/DataDog/zstd v1.4.4
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/RoaringBitmap/roaring v0.4.21
-	github.com/aws/aws-sdk-go v1.34.3
+	github.com/aws/aws-sdk-go v1.36.28
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cyberdelia/lzo v0.0.0-20171006181345-d85071271a6f
 	github.com/denisenkom/go-mssqldb v0.0.0-20200428022330-06a60b6afbbc
@@ -48,7 +48,6 @@ require (
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/testify v1.5.1
 	github.com/ulikunitz/xz v0.5.6
