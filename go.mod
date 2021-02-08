@@ -48,10 +48,9 @@ require (
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.1
 	github.com/stretchr/testify v1.5.1
-	github.com/ulikunitz/xz v0.5.6
+	github.com/ulikunitz/xz v0.5.10
 	github.com/wal-g/storages v0.0.0-20201214053810-2f4f68a084d2
 	github.com/wal-g/tracelog v0.0.0-20190824100002-0ab2b054ff30
 	github.com/xdg/stringprep v1.0.1-0.20180714160509-73f8eece6fdc // indirect
