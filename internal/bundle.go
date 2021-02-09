@@ -166,6 +166,9 @@ func (bundle *Bundle) StartBackup(conn *pgx.Conn, backup string) (backupName str
 		return "", 0, queryRunner.Version, "", queryRunner.SystemIdentifier, err
 	}
 	lsn, err = pgx.ParseLSN(lsnStr)
+	if err != nil {
+		return "", 0, queryRunner.Version, "", queryRunner.SystemIdentifier, err
+	}
 
 	if bundle.Replica {
 		name, bundle.Timeline, err = getWalFilename(lsn, conn)

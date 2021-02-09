@@ -185,7 +185,6 @@ func (h *DeleteHandler) FindTargetRetain(retentionCount, modifier int) (BackupOb
 	return findTarget(h.backups, h.greater, choiceFunc)
 }
 
-
 func (h *DeleteHandler) FindTargetByName(bname string) (BackupObject, error) {
 	return findTarget(h.backups, h.greater, func(object BackupObject) bool {
 		return strings.HasPrefix(object.GetName(), bname)

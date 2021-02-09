@@ -238,8 +238,9 @@ func forkPrefetch(walFileName string, location string) {
 	}
 	cmd := exec.Command(os.Args[0], "wal-prefetch", walFileName, location)
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("%s=%s", "S3_ENDPOINT_PORT", EndpointPortSetting))
-	env = append(env, fmt.Sprintf("%s=%s", "S3_ENDPOINT_SOURCE", EndpointSourceSetting))
+	env = append(env,
+		fmt.Sprintf("%s=%s", "S3_ENDPOINT_PORT", EndpointPortSetting),
+		fmt.Sprintf("%s=%s", "S3_ENDPOINT_SOURCE", EndpointSourceSetting))
 	cmd.Env = env
 	err = cmd.Start()
 

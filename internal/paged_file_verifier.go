@@ -72,7 +72,7 @@ func calculateSum(checksum, value uint32) uint32 {
 // The checksum includes the block number (to detect the case where a page is
 // somehow moved to a different location), the page header (excluding the
 // checksum itself), and the page data.
-func pgChecksumPage(blockNo uint32, pageBytes [DatabasePageSize]byte) (uint16, error) {
+func pgChecksumPage(blockNo uint32, pageBytes *PgDatabasePage) (uint16, error) {
 	// Set pd_checksum to zero, so that the checksum calculation
 	// isn't affected by the checksum stored on the page.
 	for i := PdChecksumOffset; i < PdChecksumOffset+PdChecksumLen; i++ {
@@ -89,10 +89,10 @@ func pgChecksumPage(blockNo uint32, pageBytes [DatabasePageSize]byte) (uint16, e
 }
 
 // Block checksum algorithm. The page must be adequately aligned (at least on 4-byte boundary).
-func pgChecksumBlock(page [DatabasePageSize]byte) uint32 {
+func pgChecksumBlock(page *PgDatabasePage) uint32 {
 	// Initialize partial checksums to their corresponding offsets
 	sums := checksumBaseOffsets
-	var pageForChecksum = *(*PgChecksummablePage)(unsafe.Pointer(&page))
+	var pageForChecksum = *(*PgChecksummablePage)(unsafe.Pointer(page))
 	hashIterationsCount := DatabasePageSize / int64(NSums*sizeofInt32)
 
 	// main checksum calculation
@@ -127,7 +127,7 @@ func pgChecksumBlock(page [DatabasePageSize]byte) uint32 {
 // checking pages before they are loaded into buffer pool.
 //
 // see:  src/backend/storage/page/bufpage.info
-func isPageCorrupted(path string, blockNo uint32, page PgDatabasePage) (bool, error) {
+func isPageCorrupted(path string, blockNo uint32, page *PgDatabasePage) (bool, error) {
 	pageHeader, err := parsePostgresPageHeader(bytes.NewReader(page[:]))
 	if err != nil {
 		return false, err
@@ -237,5 +237,5 @@ func verifySinglePage(path string, blockNo uint32, pageBlocks io.Reader) (bool, 
 	if err != nil {
 		return false, err
 	}
-	return isPageCorrupted(path, blockNo, page)
+	return isPageCorrupted(path, blockNo, &page)
 }

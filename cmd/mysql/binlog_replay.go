@@ -23,6 +23,7 @@ var binlogReplayCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		folder, err := internal.ConfigureFolder()
 		tracelog.ErrorLogger.FatalOnError(err)
+
 		mysql.HandleBinlogReplay(folder, replayBackupName, replayUntilTs)
 	},
 }

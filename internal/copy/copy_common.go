@@ -37,7 +37,7 @@ func Infos(chs []InfoProvider) error {
 		}
 
 		// block here
-		_ = <-tickets
+		<-tickets
 		wg.Add(1)
 
 		go func(handler InfoProvider) {

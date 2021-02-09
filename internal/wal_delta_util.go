@@ -6,8 +6,8 @@ import (
 
 const (
 	WalFileInDelta      uint64 = 16
-	DeltaFilenameSuffix        = "_delta"
-	PartFilenameSuffix         = "_part"
+	DeltaFilenameSuffix string = "_delta"
+	PartFilenameSuffix  string = "_part"
 )
 
 func ToPartFilename(deltaFilename string) string {

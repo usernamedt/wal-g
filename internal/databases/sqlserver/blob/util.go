@@ -37,7 +37,10 @@ func (drw *DebugResponseWriter) Write(b []byte) (int, error) {
 func (drw *DebugResponseWriter) WriteHeader(s int) {
 	drw.back.WriteHeader(s)
 	b := bytes.NewBuffer([]byte{})
-	drw.Header().Write(b)
+	err := drw.Header().Write(b)
+	if err != nil {
+		tracelog.ErrorLogger.Printf("WriteHeader failed: %v", err)
+	}
 	tracelog.DebugLogger.Printf("HTTP %d\n%s\n\n", s, b)
 }
 

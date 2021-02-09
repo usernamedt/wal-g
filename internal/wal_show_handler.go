@@ -188,7 +188,8 @@ func getBackupsInRange(startSegmentName, endSegmentName string, timeline uint32,
 	backups []BackupDetail) ([]*BackupDetail, error) {
 	filteredBackups := make([]*BackupDetail, 0)
 
-	for _, backup := range backups {
+	for idx := range backups {
+		backup := &backups[idx]
 		backupTimeline, _, err := ParseWALFilename(backup.WalFileName)
 		if err != nil {
 			return nil, err
@@ -198,8 +199,7 @@ func getBackupsInRange(startSegmentName, endSegmentName string, timeline uint32,
 
 		// there we compare segments lexicographically, maybe it is wrong...
 		if timeline == backupTimeline && startSegment >= startSegmentName && endSegment <= endSegmentName {
-			filteredBackup := backup
-			filteredBackups = append(filteredBackups, &filteredBackup)
+			filteredBackups = append(filteredBackups, backup)
 		}
 	}
 	return filteredBackups, nil

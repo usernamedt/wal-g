@@ -406,7 +406,9 @@ func (bs *Server) HandleBlockListGet(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	if _, err = w.Write(data); err != nil {
+		bs.returnError(w, req, err)
+	}
 }
 
 // Index operations

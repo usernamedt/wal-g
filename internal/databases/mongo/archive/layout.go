@@ -77,8 +77,8 @@ func BackupNamesFromBackupTimes(backups []internal.BackupTime) []string {
 // BackupNamesFromBackups forms list of backup names from Backups
 func BackupNamesFromBackups(backups []models.Backup) []string {
 	names := make([]string, 0, len(backups))
-	for _, b := range backups {
-		names = append(names, b.BackupName)
+	for idx := range backups {
+		names = append(names, backups[idx].BackupName)
 	}
 	return names
 }
