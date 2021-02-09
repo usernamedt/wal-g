@@ -182,7 +182,6 @@ func (bundle *Bundle) StartBackup(conn *pgx.Conn, backup string) (backupName str
 		}
 	}
 	return "base_" + name, lsn, queryRunner.Version, dataDir, queryRunner.SystemIdentifier, nil
-
 }
 
 // TODO : unit tests
@@ -336,7 +335,7 @@ func (bundle *Bundle) UploadPgControl(compressorFileExtension string) error {
 
 		lim := &io.LimitedReader{
 			R: file,
-			N: int64(fileInfoHeader.Size),
+			N: fileInfoHeader.Size,
 		}
 
 		_, err = io.Copy(tarWriter, lim)

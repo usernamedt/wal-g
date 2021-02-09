@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 )
 
@@ -17,9 +16,8 @@ var ErrNotFound = errors.New("object not found")
 var ErrBadRequest = errors.New("invalid request")
 
 type Lease struct {
-	folder storage.Folder
-	ID     string
-	End    time.Time
+	ID  string
+	End time.Time
 }
 
 type DebugResponseWriter struct {

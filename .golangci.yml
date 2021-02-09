@@ -52,7 +52,6 @@ linters:
     - unparam
     - unused
     - varcheck
-    - whitespace
   # temporarily disabled
   #  - golint
   #  - lll
@@ -60,6 +59,7 @@ linters:
   #  - deadcode
   #  - stylecheck
   #  - gosimple
+  #  - whitespace
   # don't enable:
   # - gosec
   # - gochecknoinits
@@ -80,5 +80,8 @@ run:
     - "cmd/redis"
     - "internal/databases/redis"
     - "tests_func"
+    - "tmp"
+    - "submodules"
+    - "testtools"
   skip-files:
     - ".*_test.go$"

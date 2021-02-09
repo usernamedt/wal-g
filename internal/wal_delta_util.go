@@ -33,5 +33,5 @@ func GetDeltaFilenameFor(walFilename string) (string, error) {
 
 func GetPositionInDelta(walFilename string) int {
 	_, logSegNo, _ := ParseWALFilename(walFilename)
-	return int(logSegNo % uint64(WalFileInDelta))
+	return int(logSegNo % WalFileInDelta)
 }

@@ -151,7 +151,7 @@ func SplitPurgingOplogArchivesByTS(archives []models.Archive, purgeBeforeTS mode
 //OldestBackupAfterTime returns last backup after given time.
 func OldestBackupAfterTime(backups []models.Backup, after time.Time) (models.Backup, error) {
 	if len(backups) <= 0 {
-		return models.Backup{}, fmt.Errorf("empty backup list recieved")
+		return models.Backup{}, fmt.Errorf("empty backup list received")
 	}
 	retainAfterTS := after.Unix()
 

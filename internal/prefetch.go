@@ -90,6 +90,7 @@ func prefaultData(prefaultStartLsn uint64, timelineId uint32, waitGroup *sync.Wa
 	err = filepath.Walk(archiveDirectory, bundle.prefaultWalkedFSObject)
 	tracelog.ErrorLogger.FatalOnError(err)
 	err = bundle.FinishQueue()
+	tracelog.ErrorLogger.FatalOnError(err)
 }
 
 // TODO : unit tests

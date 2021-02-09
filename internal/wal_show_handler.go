@@ -121,8 +121,7 @@ func HandleWalShow(rootFolder storage.Folder, showBackups bool, outputWriter Wal
 	tracelog.ErrorLogger.FatalfOnError("Failed to get the WAL folder filenames %v\n", err)
 
 	walSegments := getSegmentsFromFiles(filenames)
-	segmentsByTimelines, err := groupSegmentsByTimelines(walSegments)
-	tracelog.ErrorLogger.FatalfOnError("Failed to group WAL segments by timelines %v\n", err)
+	segmentsByTimelines := groupSegmentsByTimelines(walSegments)
 
 	timelineInfos := make([]*TimelineInfo, 0, len(segmentsByTimelines))
 	for _, segmentsSequence := range segmentsByTimelines {
@@ -152,7 +151,7 @@ func HandleWalShow(rootFolder storage.Folder, showBackups bool, outputWriter Wal
 	tracelog.ErrorLogger.FatalfOnError("Error writing output: %v\n", err)
 }
 
-func groupSegmentsByTimelines(segments map[WalSegmentDescription]bool) (map[uint32]*WalSegmentsSequence, error) {
+func groupSegmentsByTimelines(segments map[WalSegmentDescription]bool) map[uint32]*WalSegmentsSequence {
 	segmentsByTimelines := make(map[uint32]*WalSegmentsSequence)
 	for segment := range segments {
 		if timelineInfo, ok := segmentsByTimelines[segment.Timeline]; ok {
@@ -161,7 +160,7 @@ func groupSegmentsByTimelines(segments map[WalSegmentDescription]bool) (map[uint
 		}
 		segmentsByTimelines[segment.Timeline] = NewSegmentsSequence(segment.Timeline, segment.Number)
 	}
-	return segmentsByTimelines, nil
+	return segmentsByTimelines
 }
 
 // addBackupsInfo adds info about available backups for each timeline
