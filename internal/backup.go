@@ -29,6 +29,8 @@ var UtilityFilePaths = map[string]bool{
 	BackupLabelFilename:   true,
 	TablespaceMapFilename: true,
 }
+var PatternBackupName = fmt.Sprintf("base_%[1]s(_D_%[1]s)?", PatternTimelineAndLogSegNo)
+var RegexpBackupName = regexp.MustCompile(PatternBackupName)
 
 type NoBackupsFoundError struct {
 	error

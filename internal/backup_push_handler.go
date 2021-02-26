@@ -198,7 +198,7 @@ func uploadBackup(
 // TODO : unit tests
 // HandleBackupPush is invoked to perform a wal-g backup-push
 func HandleBackupPush(uploader *WalUploader, archiveDirectory string, isPermanent, isFullBackup,
-	verifyPageChecksums, storeAllCorruptBlocks bool, tarBallComposerType TarBallComposerType) {
+	verifyPageChecksums, storeAllCorruptBlocks bool, tarBallComposerType TarBallComposerType, incrementFrom string) {
 	archiveDirectory = utility.ResolveSymlink(archiveDirectory)
 	maxDeltas, fromFull := getDeltaConfig()
 	checkPgVersionAndPgControl(archiveDirectory)
@@ -209,8 +209,8 @@ func HandleBackupPush(uploader *WalUploader, archiveDirectory string, isPermanen
 
 	folder := uploader.UploadingFolder
 	basebackupFolder := folder.GetSubFolder(utility.BaseBackupPath)
-	if maxDeltas > 0 && !isFullBackup {
-		previousBackupName, err = getLatestBackupName(folder)
+	if maxDeltas > 0 && !isFullBackup  {
+		previousBackupName, err = findPreviousBackupName(incrementFrom, folder)
 		if err != nil {
 			if _, ok := err.(NoBackupsFoundError); ok {
 				tracelog.InfoLogger.Println("Couldn't find previous backup. Doing full backup.")
@@ -308,4 +308,24 @@ func checkPgVersionAndPgControl(archiveDirectory string) {
 	tracelog.ErrorLogger.FatalfOnError("It looks like you are trying to backup not pg_data. PgControl file not found: %v\n", err)
 	_, err = ioutil.ReadFile(filepath.Join(archiveDirectory, "PG_VERSION"))
 	tracelog.ErrorLogger.FatalfOnError("It looks like you are trying to backup not pg_data. PG_VERSION file not found: %v\n", err)
+}
+
+func findPreviousBackupName(incrementFrom string, folder storage.Folder) (string, error) {
+	if incrementFrom == "" {
+		// increment from the latest backup by default
+		return getLatestBackupName(folder)
+	}
+
+	extractedBackupName := RegexpBackupName.FindString(incrementFrom)
+
+	if extractedBackupName != "" && extractedBackupName == incrementFrom {
+		// if exact backup name is specified, search for it in storage
+		_, err := GetBackupByName(extractedBackupName, utility.BaseBackupPath, folder)
+		if err == nil {
+			return extractedBackupName, nil
+		}
+		return "", fmt.Errorf("failed to get backup with specified name: %s, error: %w", extractedBackupName, err)
+	}
+	return "", errors.New("not implemented...")
+	//todo: search backup by metadata
 }

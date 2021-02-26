@@ -1,8 +1,6 @@
 package pg
 
 import (
-	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/pkg/errors"
@@ -18,8 +16,6 @@ const UseSentinelTimeDescription = "Use backup creation time from sentinel for b
 
 var confirmed = false
 var useSentinelTime = false
-var patternBackupName = fmt.Sprintf("base_%[1]s(_D_%[1]s)?", internal.PatternTimelineAndLogSegNo)
-var regexpBackupName = regexp.MustCompile(patternBackupName)
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
@@ -266,5 +262,5 @@ func postgresIsFullBackup(folder storage.Folder, object storage.Object) bool {
 }
 
 func fetchBackupName(object storage.Object) string {
-	return regexpBackupName.FindString(object.GetName())
+	return internal.RegexpBackupName.FindString(object.GetName())
 }

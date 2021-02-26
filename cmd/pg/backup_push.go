@@ -8,24 +8,26 @@ import (
 )
 
 const (
-	ackupPushShortDescription      = "Makes backup and uploads it to storage"
+	backupPushShortDescription     = "Makes backup and uploads it to storage"
 	permanentFlag                  = "permanent"
 	fullBackupFlag                 = "full"
 	verifyPagesFlag                = "verify"
 	storeAllCorruptBlocksFlag      = "store-all-corrupt"
-	UseRatingComposer              = "rating-composer"
+	useRatingComposerFlag          = "rating-composer"
+	incrementFromFlag              = "increment-from"
 	permanentShorthand             = "p"
 	fullBackupShorthand            = "f"
 	verifyPagesShorthand           = "v"
 	storeAllCorruptBlocksShorthand = "s"
-	UseRatingComposerShortHand     = "r"
+	useRatingComposerShorthand     = "r"
+	incrementFromShorthand		   = "i"
 )
 
 var (
 	// backupPushCmd represents the backupPush command
 	backupPushCmd = &cobra.Command{
 		Use:   "backup-push db_directory",
-		Short: ackupPushShortDescription, // TODO : improve description
+		Short: backupPushShortDescription, // TODO : improve description
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			uploader, err := internal.ConfigureWalUploader()
@@ -37,7 +39,8 @@ var (
 			if useRatingComposer {
 				tarBallComposerType = internal.RatingComposer
 			}
-			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums, storeAllCorruptBlocks, tarBallComposerType)
+			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums,
+				storeAllCorruptBlocks, tarBallComposerType, incrementFrom)
 		},
 	}
 	permanent             = false
@@ -45,6 +48,7 @@ var (
 	verifyPageChecksums   = false
 	storeAllCorruptBlocks = false
 	useRatingComposer     = false
+	incrementFrom 		  = ""
 )
 
 func init() {
@@ -55,5 +59,6 @@ func init() {
 	backupPushCmd.Flags().BoolVarP(&verifyPageChecksums, verifyPagesFlag, verifyPagesShorthand, false, "Verify page checksums")
 	backupPushCmd.Flags().BoolVarP(&storeAllCorruptBlocks, storeAllCorruptBlocksFlag, storeAllCorruptBlocksShorthand,
 		false, "Store all corrupt blocks found during page checksum verification")
-	backupPushCmd.Flags().BoolVarP(&useRatingComposer, UseRatingComposer, UseRatingComposerShortHand, false, "Use rating tar composer (beta)")
+	backupPushCmd.Flags().BoolVarP(&useRatingComposer, useRatingComposerFlag, useRatingComposerShorthand, false, "Use rating tar composer (beta)")
+	backupPushCmd.Flags().StringVarP(&incrementFrom, incrementFromFlag, incrementFromShorthand, "", "Increment from specific backup specified by name or UserData")
 }
