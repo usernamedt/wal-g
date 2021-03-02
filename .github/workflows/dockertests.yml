@@ -165,6 +165,7 @@ jobs:
       - name: Second retry on failure
         if: steps.run-test.outcome != 'success' && steps.first-retry.outcome != 'success'
         id: second-retry
+        continue-on-error: true
         run: |
           docker ps -a
           docker-compose down -v
