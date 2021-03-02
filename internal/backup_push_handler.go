@@ -67,6 +67,7 @@ type BackupConfig struct {
 	verifyPageChecksums       bool
 	storeAllCorruptBlocks     bool
 	tarBallComposerType       TarBallComposerType
+	userData				  string
 }
 
 // TODO : unit tests
