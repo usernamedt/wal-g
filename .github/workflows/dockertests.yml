@@ -164,6 +164,15 @@ jobs:
 
       - name: Second retry on failure
         if: steps.run-test.outcome != 'success' && steps.first-retry.outcome != 'success'
+        id: second-retry
+        run: |
+          docker ps -a
+          docker-compose down -v
+          ${{ matrix.command }}
+
+      - name: Third retry on failure
+        if: steps.run-test.outcome != 'success' && steps.first-retry.outcome != 'success' && steps.second-retry.outcome != 'success'
+        id: third-retry
         run: |
           docker ps -a
           docker-compose down -v
