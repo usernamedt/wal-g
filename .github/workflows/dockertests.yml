@@ -179,6 +179,14 @@ jobs:
           docker-compose down -v
           ${{ matrix.command }}
 
+      - name: Fourth retry on failure
+        if: steps.run-test.outcome != 'success' && steps.first-retry.outcome != 'success' && steps.second-retry.outcome != 'success' && steps.third-retry.outcome != 'success'
+        id: fourth-retry
+        run: |
+          docker ps -a
+          docker-compose down -v
+          ${{ matrix.command }}
+
     env:
       USE_LIBSODIUM: 1
       USE_LZO: 1
