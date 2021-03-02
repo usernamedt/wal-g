@@ -149,7 +149,24 @@ jobs:
           exit 1
 
       - name: Run test
+        id: run-test
+        continue-on-error: true
         run: ${{ matrix.command }}
+
+      - name: First retry on failure
+        if: steps.run-test.outcome != 'success'
+        id: first-retry
+        continue-on-error: true
+        run: |
+          docker-compose rm -f
+          ${{ matrix.command }}
+
+      - name: Second retry on failure
+        if: steps.run-test.outcome != 'success' && steps.first-retry.outcome != 'success'
+        run: |
+          docker-compose rm -f
+          ${{ matrix.command }}
+
     env:
       USE_LIBSODIUM: 1
       USE_LZO: 1
