@@ -12,7 +12,7 @@ export WALG_MYSQL_BACKUP_PREPARE_COMMAND=
 mysql_install_db > /dev/null
 service mysql start
 
-sysbench --table-size=10 prepare
+sysbench --table-size=5 prepare
 
 sysbench --time=5 run
 

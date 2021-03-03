@@ -16,7 +16,7 @@ mysql -e "PURGE BINARY LOGS TO '$current_binlog'";
 wal-g backup-push
 mysql -e "FLUSH LOGS"
 
-sysbench --table-size=10 prepare
+sysbench --table-size=5 prepare
 sysbench --time=3 run
 mysql -e "FLUSH LOGS"
 wal-g binlog-push

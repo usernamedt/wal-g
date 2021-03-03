@@ -13,7 +13,7 @@ mysqld --initialize --init-file=/etc/mysql/init.sql
 
 service mysql start
 
-sysbench --table-size=10 prepare
+sysbench --table-size=5 prepare
 
 sysbench --time=5 run
 

@@ -9,7 +9,7 @@ export WALE_S3_PREFIX=s3://mysqlmarkbucket
 # initialize mysql
 mysqld --initialize --init-file=/etc/mysql/init.sql
 service mysql start
-sysbench --table-size=10 prepare
+sysbench --table-size=5 prepare
 mysql -e "FLUSH LOGS"
 
 # backup

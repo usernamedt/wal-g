@@ -9,7 +9,7 @@ export WALE_S3_PREFIX=s3://mariadbfullmariabackupbucket
 mysql_install_db > /dev/null
 service mysql start
 
-sysbench --table-size=10 prepare
+sysbench --table-size=5 prepare
 
 sysbench --time=5 run
 
