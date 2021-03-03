@@ -151,7 +151,9 @@ jobs:
       - name: Run test
         id: run-test
         continue-on-error: true
-        run: ${{ matrix.command }}
+        run: |
+          df -h .
+          ${{ matrix.command }}
 
       - name: First retry on failure
         if: steps.run-test.outcome != 'success'
