@@ -153,6 +153,8 @@ jobs:
         continue-on-error: true
         run: |
           df -h .
+          docker system df --verbose
+          docker ps --size
           ${{ matrix.command }}
 
       - name: First retry on failure
@@ -161,7 +163,8 @@ jobs:
         continue-on-error: true
         run: |
           df -h .
-          docker ps -a
+          docker system df --verbose
+          docker ps --size -a
           docker-compose down -v
           ${{ matrix.command }}
 
@@ -171,7 +174,8 @@ jobs:
         continue-on-error: true
         run: |
           df -h .
-          docker ps -a
+          docker system df --verbose
+          docker ps --size -a
           docker-compose down -v
           ${{ matrix.command }}
 
@@ -181,7 +185,8 @@ jobs:
         continue-on-error: true
         run: |
           df -h .
-          docker ps -a
+          docker system df --verbose
+          docker ps --size -a
           docker-compose down -v
           ${{ matrix.command }}
 
@@ -190,7 +195,8 @@ jobs:
         id: fourth-retry
         run: |
           df -h .
-          docker ps -a
+          docker system df --verbose
+          docker ps --size -a
           docker-compose down -v
           ${{ matrix.command }}
 
