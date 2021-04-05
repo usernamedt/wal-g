@@ -119,7 +119,7 @@ func GetBackupDetails(folder storage.Folder, backupTime BackupTime) (BackupDetai
 }
 
 func GetBackupDetailsWithTarget(folder storage.Folder, backupTime BackupTime, targetPath string) (BackupDetail, error) {
-	backup, err := postgres.GetBackupByName(backupTime.BackupName, targetPath, folder)
+	backup, err := GetBackupByName(backupTime.BackupName, targetPath, folder)
 	if err != nil {
 		return BackupDetail{}, err
 	}

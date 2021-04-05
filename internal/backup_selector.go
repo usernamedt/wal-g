@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"reflect"
 	"strings"
 
@@ -106,7 +105,7 @@ func NewBackupNameSelector(backupName string) (BackupNameSelector, error) {
 }
 
 func (s BackupNameSelector) Select(folder storage.Folder) (string, error) {
-	_, err := postgres.GetBackupByName(s.backupName, utility.BaseBackupPath, folder)
+	_, err := GetBackupByName(s.backupName, utility.BaseBackupPath, folder)
 	if err != nil {
 		return "", err
 	}
