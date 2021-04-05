@@ -1,13 +1,10 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/wal-g/internal/compression"
 	"github.com/wal-g/wal-g/utility"
 )
@@ -56,36 +53,4 @@ func downloadAndDecompressStream(backup *Backup, writeCloser io.WriteCloser) err
 		return nil
 	}
 	return newArchiveNonExistenceError(fmt.Sprintf("Archive '%s' does not exist.\n", backup.Name))
-}
-
-// TODO : unit tests
-func FetchStreamSentinel(backup *Backup, sentinelDto interface{}) error {
-	sentinelDtoData, err := backup.fetchSentinelData()
-	if err != nil {
-		return errors.Wrap(err, "failed to fetch sentinel")
-	}
-	err = json.Unmarshal(sentinelDtoData, sentinelDto)
-	return errors.Wrap(err, "failed to unmarshal sentinel")
-}
-
-// DownloadFile downloads, decompresses and decrypts
-func DownloadFile(folder storage.Folder, filename, ext string, writeCloser io.WriteCloser) error {
-	decompressor := compression.FindDecompressor(ext)
-	if decompressor == nil {
-		return fmt.Errorf("decompressor for extension '%s' was not found", ext)
-	}
-	archiveReader, exists, err := TryDownloadFile(folder, filename)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return fmt.Errorf("File '%s' does not exist.\n", filename)
-	}
-
-	err = DecompressDecryptBytes(&EmptyWriteIgnorer{WriteCloser: writeCloser}, archiveReader, decompressor)
-	if err != nil {
-		return err
-	}
-	utility.LoggedClose(writeCloser, "")
-	return nil
 }

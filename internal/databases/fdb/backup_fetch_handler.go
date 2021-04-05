@@ -2,6 +2,7 @@ package fdb
 
 import (
 	"context"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os/exec"
 
 	"github.com/wal-g/storages/storage"
@@ -9,5 +10,5 @@ import (
 )
 
 func HandleBackupFetch(ctx context.Context, folder storage.Folder, targetBackupSelector internal.BackupSelector, restoreCmd *exec.Cmd) {
-	internal.HandleBackupFetch(folder, targetBackupSelector, internal.GetCommandStreamFetcher(restoreCmd))
+	postgres.HandleBackupFetch(folder, targetBackupSelector, postgres.GetCommandStreamFetcher(restoreCmd))
 }

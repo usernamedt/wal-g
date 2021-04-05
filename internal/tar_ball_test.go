@@ -3,6 +3,7 @@ package internal_test
 import (
 	"archive/tar"
 	"bytes"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"io"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 // TODO : this test is broken now
 // Tests S3 get and set methods.
 func TestS3TarBall(t *testing.T) {
-	bundle := &internal.Bundle{
+	bundle := &postgres.Bundle{
 		ArchiveDirectory: "/usr/local",
 		TarSizeThreshold: int64(10),
 	}
@@ -39,7 +40,7 @@ func TestS3TarBall(t *testing.T) {
 // Tests S3 dependent functions for StorageTarBall such as
 // SetUp(), CloseTar() and Finish().
 func TestS3DependentFunctions(t *testing.T) {
-	bundle := &internal.Bundle{
+	bundle := &postgres.Bundle{
 		ArchiveDirectory: "",
 		TarSizeThreshold: 100,
 	}

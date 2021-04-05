@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/internal"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 )
 
 const (
@@ -19,7 +20,7 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			uploader, err := internal.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
-			internal.HandleCatchupPush(uploader, args[0], fromLSN)
+			postgres.HandleCatchupPush(uploader, args[0], fromLSN)
 		},
 	}
 	fromLSN uint64

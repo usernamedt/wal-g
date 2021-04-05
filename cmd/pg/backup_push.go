@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -40,10 +41,10 @@ var (
 			tracelog.ErrorLogger.FatalOnError(err)
 			verifyPageChecksums = verifyPageChecksums || viper.GetBool(internal.VerifyPageChecksumsSetting)
 			storeAllCorruptBlocks = storeAllCorruptBlocks || viper.GetBool(internal.StoreAllCorruptBlocksSetting)
-			tarBallComposerType := internal.RegularComposer
+			tarBallComposerType := postgres.RegularComposer
 			useRatingComposer = useRatingComposer || viper.GetBool(internal.UseRatingComposerSetting)
 			if useRatingComposer {
-				tarBallComposerType = internal.RatingComposer
+				tarBallComposerType = postgres.RatingComposer
 			}
 			if deltaFromName == "" {
 				deltaFromName = viper.GetString(internal.DeltaFromNameSetting)
@@ -58,7 +59,7 @@ var (
 				userData = viper.GetString(internal.SentinelUserDataSetting)
 			}
 
-			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums,
+			postgres.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums,
 				storeAllCorruptBlocks, tarBallComposerType, deltaBaseSelector, userData)
 		},
 	}

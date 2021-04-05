@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 	"path"
 	"time"
@@ -90,7 +91,7 @@ func HandleBinlogReplay(folder storage.Folder, backupName string, untilTs string
 }
 
 func getTimestamps(folder storage.Folder, backupName, untilTs string) (time.Time, time.Time, error) {
-	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, folder)
+	backup, err := postgres.GetBackupByName(backupName, utility.BaseBackupPath, folder)
 	if err != nil {
 		return time.Time{}, time.Time{}, errors.Wrap(err, "Unable to get backup")
 	}

@@ -3,6 +3,7 @@ package mysql
 import (
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/internal"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"github.com/wal-g/wal-g/utility"
 )
 
@@ -23,7 +24,7 @@ func MarkBackup(uploader *internal.Uploader, backupName string, toPermanent bool
 	meta, err := backup.FetchMeta()
 	if err != nil {
 		tracelog.WarningLogger.Println("failed to get previous meta, creating new one")
-		meta = internal.ExtendedMetadataDto{
+		meta = postgres.ExtendedMetadataDto{
 			IsPermanent: toPermanent,
 		}
 	} else {

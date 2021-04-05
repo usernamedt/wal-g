@@ -162,7 +162,7 @@ func fetchLogs(folder storage.Folder, dstDir string, startTs time.Time, endTs ti
 		binlogName := utility.TrimFileExtension(logFile.GetName())
 		binlogPath := path.Join(dstDir, binlogName)
 		tracelog.InfoLogger.Printf("downloading %s into %s", binlogName, binlogPath)
-		if err = internal.DownloadWALFileTo(logFolder, binlogName, binlogPath); err != nil {
+		if err = internal.DownloadFileTo(logFolder, binlogName, binlogPath); err != nil {
 			tracelog.ErrorLogger.Printf("failed to download %s: %v", binlogName, err)
 			return err
 		}
@@ -184,7 +184,7 @@ func fetchLogs(folder storage.Folder, dstDir string, startTs time.Time, endTs ti
 func getBinlogSinceTs(folder storage.Folder, backup *internal.Backup) (time.Time, error) {
 	startTs := utility.MaxTime // far future
 	var streamSentinel StreamSentinelDto
-	err := internal.FetchStreamSentinel(backup, &streamSentinel)
+	err := internal.FetchSentinel(backup, &streamSentinel)
 	if err != nil {
 		return time.Time{}, err
 	}

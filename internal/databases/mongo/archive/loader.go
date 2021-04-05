@@ -3,6 +3,7 @@ package archive
 import (
 	"bytes"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"io"
 	"path"
 	"sort"
@@ -85,7 +86,7 @@ func NewStorageDownloader(opts StorageSettings) (*StorageDownloader, error) {
 func (sd *StorageDownloader) BackupMeta(name string) (models.Backup, error) {
 	backup := internal.NewBackup(sd.backupsFolder, name)
 	var sentinel models.Backup
-	err := internal.FetchStreamSentinel(backup, &sentinel)
+	err := internal.FetchSentinel(backup, &sentinel)
 	if err != nil {
 		return models.Backup{}, fmt.Errorf("can not fetch stream sentinel: %w", err)
 	}
@@ -268,7 +269,7 @@ func (su *StorageUploader) UploadBackup(stream io.Reader, cmd ErrWaiter, metaPro
 		DataSize:        meta.DataSize,
 		Permanent:       meta.Permanent,
 	}
-	if err := internal.UploadSentinel(su.UploaderProvider, backupSentinel, backupName); err != nil {
+	if err := postgres.UploadSentinel(su.UploaderProvider, backupSentinel, backupName); err != nil {
 		return fmt.Errorf("can not upload sentinel: %+v", err)
 	}
 	return nil
@@ -296,7 +297,7 @@ func (sp *StoragePurger) DeleteBackups(backups []models.Backup) error {
 	keys := make([]string, 0, len(backups)*2)
 	for idx := range backups {
 		backup := &backups[idx]
-		keys = append(keys, internal.SentinelNameFromBackup(backup.BackupName))
+		keys = append(keys, postgres.SentinelNameFromBackup(backup.BackupName))
 
 		dataObjects, _, err := sp.backupsFolder.GetSubFolder(backup.BackupName).ListFolder()
 		if err != nil {

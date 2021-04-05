@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,7 @@ import (
 )
 
 const (
-	DefaultDataBurstRateLimit = 8 * DatabasePageSize
+	DefaultDataBurstRateLimit = 8 * postgres.DatabasePageSize
 	DefaultDataFolderPath     = "/tmp"
 	WaleFileHost              = "file://localhost"
 )
@@ -205,7 +206,7 @@ func getArchiveDataFolderPath() string {
 	return filepath.Join(GetDataFolderPath(), "walg_archive_status")
 }
 
-func getRelativeArchiveDataFolderPath() string {
+func GetRelativeArchiveDataFolderPath() string {
 	return filepath.Join(getRelativeWalFolderPath(""), "walg_data", "walg_archive_status")
 }
 
@@ -237,7 +238,7 @@ func ConfigureUploader() (uploader *Uploader, err error) {
 // ConfigureWalUploader connects to storage and creates an uploader. It makes sure
 // that a valid session has started; if invalid, returns AWS error
 // and `<nil>` values.
-func ConfigureWalUploader() (uploader *WalUploader, err error) {
+func ConfigureWalUploader() (uploader *postgres.WalUploader, err error) {
 	uploader, err = ConfigureWalUploaderWithoutCompressMethod()
 	if err != nil {
 		return nil, err
@@ -251,7 +252,7 @@ func ConfigureWalUploader() (uploader *WalUploader, err error) {
 		return nil, errors.Wrap(err, "failed to configure compression")
 	}
 
-	uploader = NewWalUploader(compressor, folder, deltaFileManager)
+	uploader = postgres.NewWalUploader(compressor, folder, deltaFileManager)
 	return uploader, err
 }
 
@@ -265,7 +266,7 @@ func ConfigureUploaderWithoutCompressMethod() (uploader *Uploader, err error) {
 	return uploader, err
 }
 
-func ConfigureWalUploaderWithoutCompressMethod() (uploader *WalUploader, err error) {
+func ConfigureWalUploaderWithoutCompressMethod() (uploader *postgres.WalUploader, err error) {
 	folder, err := ConfigureFolder()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to configure folder")
@@ -276,12 +277,12 @@ func ConfigureWalUploaderWithoutCompressMethod() (uploader *WalUploader, err err
 		return nil, errors.Wrap(err, "failed to configure WAL Delta usage")
 	}
 
-	var deltaFileManager *DeltaFileManager = nil
+	var deltaFileManager *postgres.DeltaFileManager = nil
 	if useWalDelta {
-		deltaFileManager = NewDeltaFileManager(deltaDataFolder)
+		deltaFileManager = postgres.NewDeltaFileManager(deltaDataFolder)
 	}
 
-	uploader = NewWalUploader(nil, folder, deltaFileManager)
+	uploader = postgres.NewWalUploader(nil, folder, deltaFileManager)
 	return uploader, err
 }
 
@@ -336,7 +337,7 @@ func getMaxUploadQueue() (int, error) {
 	return GetMaxConcurrency(UploadQueueSetting)
 }
 
-func getMaxUploadDiskConcurrency() (int, error) {
+func GetMaxUploadDiskConcurrency() (int, error) {
 	if Turbo {
 		return 4, nil
 	}

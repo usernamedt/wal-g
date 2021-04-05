@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"io"
 	"os"
 	"text/tabwriter"
@@ -118,12 +119,12 @@ func GetBackupDetails(folder storage.Folder, backupTime BackupTime) (BackupDetai
 }
 
 func GetBackupDetailsWithTarget(folder storage.Folder, backupTime BackupTime, targetPath string) (BackupDetail, error) {
-	backup, err := GetBackupByName(backupTime.BackupName, targetPath, folder)
+	backup, err := postgres.GetBackupByName(backupTime.BackupName, targetPath, folder)
 	if err != nil {
 		return BackupDetail{}, err
 	}
 
-	metaData, err := backup.FetchMeta()
+	metaData, err := postgres.ToPgBackup(backup).FetchMeta()
 	if err != nil {
 		return BackupDetail{}, err
 	}

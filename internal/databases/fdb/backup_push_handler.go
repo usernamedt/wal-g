@@ -1,6 +1,7 @@
 package fdb
 
 import (
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os/exec"
 	"time"
 
@@ -31,6 +32,6 @@ func HandleBackupPush(uploader internal.UploaderProvider, backupCmd *exec.Cmd) {
 
 	sentinel := streamSentinelDto{StartLocalTime: timeStart}
 
-	err = internal.UploadSentinel(uploader, &sentinel, fileName)
+	err = postgres.UploadSentinel(uploader, &sentinel, fileName)
 	tracelog.ErrorLogger.FatalOnError(err)
 }

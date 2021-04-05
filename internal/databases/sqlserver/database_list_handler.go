@@ -3,6 +3,7 @@ package sqlserver
 import (
 	"context"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 	"syscall"
 
@@ -17,12 +18,12 @@ func HandleDatabaseList(backupName string) {
 	defer func() { _ = signalHandler.Close() }()
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
-	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, folder)
+	backup, err := postgres.GetBackupByName(backupName, utility.BaseBackupPath, folder)
 	if err != nil {
 		tracelog.ErrorLogger.Fatalf("can't find backup %s: %v", backupName, err)
 	}
 	sentinel := new(SentinelDto)
-	err = internal.FetchStreamSentinel(backup, sentinel)
+	err = internal.FetchSentinel(backup, sentinel)
 	tracelog.ErrorLogger.FatalOnError(err)
 	for _, name := range sentinel.Databases {
 		fmt.Println(name)

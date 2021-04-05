@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
@@ -10,8 +11,8 @@ import (
 	"github.com/wal-g/wal-g/utility"
 )
 
-// markBackup marks a backup as permanent or impermanent
-func markBackup(uploader *Uploader, folder storage.Folder, backupName string, toPermanent bool) {
+// MarkBackup marks a backup as permanent or impermanent
+func MarkBackup(uploader *Uploader, folder storage.Folder, backupName string, toPermanent bool) {
 	tracelog.InfoLogger.Printf("Retrieving previous related backups to be marked: toPermanent=%t", toPermanent)
 	metadataToUpload, err := GetMarkedBackupMetadataToUpload(folder, backupName, toPermanent)
 
@@ -191,7 +192,7 @@ func GetMetadataFromBackup(baseBackupFolder storage.Folder, backupName string) (
 	return *sentinel.IncrementFrom, true, nil
 }
 
-func GetMetadataUploadObject(backupName string, meta *ExtendedMetadataDto) (UploadObject, error) {
+func GetMetadataUploadObject(backupName string, meta *postgres.ExtendedMetadataDto) (UploadObject, error) {
 	metaFilePath := storage.JoinPath(backupName, utility.MetadataFileName)
 	dtoBody, err := json.Marshal(meta)
 	if err != nil {
@@ -227,7 +228,7 @@ func GetPermanentObjects(folder storage.Folder) (map[string]bool, map[string]boo
 	permanentBackups := map[string]bool{}
 	permanentWals := map[string]bool{}
 	for _, backupTime := range backupTimes {
-		backup, err := GetBackupByName(backupTime.BackupName, utility.BaseBackupPath, folder)
+		backup, err := postgres.GetBackupByName(backupTime.BackupName, utility.BaseBackupPath, folder)
 		if err != nil {
 			tracelog.ErrorLogger.Printf("failed to get backup by name with error %s, ignoring...", err.Error())
 			continue
@@ -239,15 +240,15 @@ func GetPermanentObjects(folder storage.Folder) (map[string]bool, map[string]boo
 			continue
 		}
 		if meta.IsPermanent {
-			timelineId, err := ParseTimelineFromBackupName(backup.Name)
+			timelineId, err := postgres.ParseTimelineFromBackupName(backup.Name)
 			if err != nil {
 				tracelog.ErrorLogger.Printf("failed to parse backup timeline for backup %s with error %s, ignoring...",
 					backupTime.BackupName, err.Error())
 				continue
 			}
 
-			startWalSegmentNo := newWalSegmentNo(meta.StartLsn - 1)
-			endWalSegmentNo := newWalSegmentNo(meta.FinishLsn - 1)
+			startWalSegmentNo := postgres.newWalSegmentNo(meta.StartLsn - 1)
+			endWalSegmentNo := postgres.newWalSegmentNo(meta.FinishLsn - 1)
 			for walSegmentNo := startWalSegmentNo; walSegmentNo <= endWalSegmentNo; walSegmentNo = walSegmentNo.next() {
 				permanentWals[walSegmentNo.getFilename(timelineId)] = true
 			}

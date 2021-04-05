@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"time"
 
 	"github.com/pkg/errors"
@@ -295,11 +296,11 @@ func getBackupStartTimeMap(folder storage.Folder, backups []storage.Object) (map
 
 // TODO: create postgres part and move it there, if it will be needed
 func postgresSegmentNoLess(object1 storage.Object, object2 storage.Object) bool {
-	_, segmentNumber1, ok := internal.TryFetchTimelineAndLogSegNo(object1.GetName())
+	_, segmentNumber1, ok := postgres.TryFetchTimelineAndLogSegNo(object1.GetName())
 	if !ok {
 		return false
 	}
-	_, segmentNumber2, ok := internal.TryFetchTimelineAndLogSegNo(object2.GetName())
+	_, segmentNumber2, ok := postgres.TryFetchTimelineAndLogSegNo(object2.GetName())
 	if !ok {
 		return false
 	}
@@ -308,11 +309,11 @@ func postgresSegmentNoLess(object1 storage.Object, object2 storage.Object) bool 
 
 // TODO: create postgres part and move it there, if it will be needed
 func postgresTimelineAndSegmentNoLess(object1 storage.Object, object2 storage.Object) bool {
-	tl1, segNo1, ok := internal.TryFetchTimelineAndLogSegNo(object1.GetName())
+	tl1, segNo1, ok := postgres.TryFetchTimelineAndLogSegNo(object1.GetName())
 	if !ok {
 		return false
 	}
-	tl2, segNo2, ok := internal.TryFetchTimelineAndLogSegNo(object2.GetName())
+	tl2, segNo2, ok := postgres.TryFetchTimelineAndLogSegNo(object2.GetName())
 	if !ok {
 		return false
 	}

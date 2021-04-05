@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -31,12 +32,12 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			folder, err := internal.ConfigureFolder()
 			tracelog.ErrorLogger.FatalOnError(err)
-			outputType := internal.TableOutput
+			outputType := postgres.TableOutput
 			if detailedJsonOutput {
-				outputType = internal.JsonOutput
+				outputType = postgres.JsonOutput
 			}
-			outputWriter := internal.NewWalShowOutputWriter(outputType, os.Stdout, !disableBackupsLookup)
-			internal.HandleWalShow(folder, !disableBackupsLookup, outputWriter)
+			outputWriter := postgres.NewWalShowOutputWriter(outputType, os.Stdout, !disableBackupsLookup)
+			postgres.HandleWalShow(folder, !disableBackupsLookup, outputWriter)
 		},
 	}
 	detailedJsonOutput   bool

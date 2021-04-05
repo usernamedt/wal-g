@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"path"
 	"strings"
 
@@ -51,7 +52,7 @@ func HandleCopyAll(fromConfigFile string, toConfigFile string) {
 
 func backupCopyingInfo(backupName, prefix string, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
 	tracelog.InfoLogger.Printf("Handle backupname '%s'.", backupName)
-	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, from)
+	backup, err := postgres.GetBackupByName(backupName, utility.BaseBackupPath, from)
 	if err != nil {
 		return nil, err
 	}

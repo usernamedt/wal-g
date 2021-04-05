@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os/exec"
 
 	"github.com/wal-g/tracelog"
@@ -41,6 +42,6 @@ func HandleBackupPush(uploader *internal.Uploader, backupCmd *exec.Cmd) {
 	}
 	tracelog.InfoLogger.Printf("Backup sentinel: %s", sentinel)
 
-	err = internal.UploadSentinel(uploader, &sentinel, fileName)
+	err = postgres.UploadSentinel(uploader, &sentinel, fileName)
 	tracelog.ErrorLogger.FatalOnError(err)
 }

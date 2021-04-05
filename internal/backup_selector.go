@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"reflect"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
 )
+
+const LatestString = "LATEST"
 
 // Select the name of storage backup chosen according to the internal rules
 type BackupSelector interface {
@@ -103,7 +106,7 @@ func NewBackupNameSelector(backupName string) (BackupNameSelector, error) {
 }
 
 func (s BackupNameSelector) Select(folder storage.Folder) (string, error) {
-	_, err := GetBackupByName(s.backupName, utility.BaseBackupPath, folder)
+	_, err := postgres.GetBackupByName(s.backupName, utility.BaseBackupPath, folder)
 	if err != nil {
 		return "", err
 	}

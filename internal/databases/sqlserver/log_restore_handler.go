@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 	"syscall"
 	"time"
@@ -24,11 +25,11 @@ func HandleLogRestore(backupName string, untilTs string, dbnames []string, fromn
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, folder)
+	backup, err := postgres.GetBackupByName(backupName, utility.BaseBackupPath, folder)
 	tracelog.ErrorLogger.FatalOnError(err)
 
 	sentinel := new(SentinelDto)
-	err = internal.FetchStreamSentinel(backup, sentinel)
+	err = internal.FetchSentinel(backup, sentinel)
 	tracelog.ErrorLogger.FatalOnError(err)
 
 	db, err := getSQLServerConnection()
