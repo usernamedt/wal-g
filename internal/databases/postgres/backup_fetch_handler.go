@@ -63,12 +63,8 @@ func chooseTablespaceSpecification(sentinelDtoSpec, spec *TablespaceSpec) *Table
 // deltaFetchRecursion function composes Backup object and recursively searches for necessary base backup
 func deltaFetchRecursionOld(backupName string, folder storage.Folder, dbDataDirectory string,
 	tablespaceSpec *TablespaceSpec, filesToUnwrap map[string]bool) error {
-	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, folder)
-	if err != nil {
-		return err
-	}
-	pgBackup := ToPgBackup(backup)
-	sentinelDto, err := pgBackup.GetSentinel()
+	backup := NewBackup(folder.GetSubFolder(utility.BaseBackupPath), backupName)
+	sentinelDto, err := backup.GetSentinel()
 	if err != nil {
 		return err
 	}
@@ -88,11 +84,12 @@ func deltaFetchRecursionOld(backupName string, folder storage.Folder, dbDataDire
 		tracelog.InfoLogger.Printf("%v fetched. Upgrading from LSN %x to LSN %x \n", *(sentinelDto.IncrementFrom), *(sentinelDto.IncrementFromLSN), *(sentinelDto.BackupStartLSN))
 	}
 
-	return pgBackup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
+	return backup.unwrapToEmptyDirectory(dbDataDirectory, sentinelDto, filesToUnwrap, false)
 }
 
-func GetPgFetcherOld(dbDataDirectory, fileMask, restoreSpecPath string) func(folder storage.Folder, backup Backup) {
-	return func(folder storage.Folder, backup Backup) {
+func GetPgFetcherOld(dbDataDirectory, fileMask, restoreSpecPath string) func(rootFolder storage.Folder, backupName string) {
+	return func(rootFolder storage.Folder, backupName string) {
+		backup := NewBackup(rootFolder.GetSubFolder(utility.BaseBackupPath), backupName)
 		filesToUnwrap, err := backup.GetFilesToUnwrap(fileMask)
 		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
 
@@ -103,7 +100,7 @@ func GetPgFetcherOld(dbDataDirectory, fileMask, restoreSpecPath string) func(fol
 			errMessege := fmt.Sprintf("Invalid restore specification path %s\n", restoreSpecPath)
 			tracelog.ErrorLogger.FatalfOnError(errMessege, err)
 		}
-		err = deltaFetchRecursionOld(backup.Name, folder, utility.ResolveSymlink(dbDataDirectory), spec, filesToUnwrap)
+		err = deltaFetchRecursionOld(backup.Name, rootFolder, utility.ResolveSymlink(dbDataDirectory), spec, filesToUnwrap)
 		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
 	}
 }

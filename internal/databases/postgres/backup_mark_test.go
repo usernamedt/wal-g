@@ -1,4 +1,4 @@
-package internal_test
+package postgres_test
 
 import (
 	"bytes"
@@ -51,14 +51,14 @@ func TestGetBackupMetadataToUpload_markSeveralBackups(t *testing.T) {
 		},
 	}
 	toMark := "base_000000010000000000000006_D_000000010000000000000004"
-	expectUploadObjectLen := 3
-	expectUploadObjectPaths := map[int]string{
-		0: "base_000000010000000000000002" + "/" + utility.MetadataFileName,
-		1: "base_000000010000000000000004_D_000000010000000000000002" + "/" + utility.MetadataFileName,
-		2: "base_000000010000000000000006_D_000000010000000000000004" + "/" + utility.MetadataFileName,
+	expectBackupsToMarkLen := 3
+	expectBackupsToMark := map[int]string{
+		0: "base_000000010000000000000002",
+		1: "base_000000010000000000000004_D_000000010000000000000002",
+		2: "base_000000010000000000000006_D_000000010000000000000004",
 	}
 
-	testGetBackupMetadataToUpload(backups, true, false, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, true, false, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_markOneBackup(t *testing.T) {
@@ -95,11 +95,11 @@ func TestGetBackupMetadataToUpload_markOneBackup(t *testing.T) {
 		},
 	}
 	toMark := "base_000000010000000000000006_D_000000010000000000000004"
-	expectUploadObjectLen := 1
-	expectUploadObjectPaths := map[int]string{
-		0: "base_000000010000000000000006_D_000000010000000000000004" + "/" + utility.MetadataFileName,
+	expectBackupsToMarkLen := 1
+	expectBackupsToMark := map[int]string{
+		0: "base_000000010000000000000006_D_000000010000000000000004",
 	}
-	testGetBackupMetadataToUpload(backups, true, false, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, true, false, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_unmarkOneBackupWithIncrementBackups(t *testing.T) {
@@ -136,12 +136,12 @@ func TestGetBackupMetadataToUpload_unmarkOneBackupWithIncrementBackups(t *testin
 		},
 	}
 	toMark := "base_000000010000000000000002"
-	expectUploadObjectLen := 1
-	expectUploadObjectPaths := map[int]string{
-		0: "base_000000010000000000000002" + "/" + utility.MetadataFileName,
+	expectBackupsToMarkLen := 1
+	expectBackupsToMark := map[int]string{
+		0: "base_000000010000000000000002",
 	}
 
-	testGetBackupMetadataToUpload(backups, false, false, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, false, false, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_unmarkOneBackupWithoutIncrementBackups(t *testing.T) {
@@ -167,12 +167,12 @@ func TestGetBackupMetadataToUpload_unmarkOneBackupWithoutIncrementBackups(t *tes
 		},
 	}
 	toMark := "base_000000010000000000000004_D_000000010000000000000002"
-	expectUploadObjectLen := 1
-	expectUploadObjectPaths := map[int]string{
+	expectBackupsToMarkLen := 1
+	expectBackupsToMark := map[int]string{
 		0: "base_000000010000000000000004_D_000000010000000000000002" + "/" + utility.MetadataFileName,
 	}
 
-	testGetBackupMetadataToUpload(backups, false, false, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, false, false, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_tryToMarkAlreadyMarkedBackup(t *testing.T) {
@@ -187,10 +187,10 @@ func TestGetBackupMetadataToUpload_tryToMarkAlreadyMarkedBackup(t *testing.T) {
 		},
 	}
 	toMark := "base_000000010000000000000002"
-	expectUploadObjectLen := 0
-	expectUploadObjectPaths := map[int]string{}
+	expectBackupsToMarkLen := 0
+	expectBackupsToMark := map[int]string{}
 
-	testGetBackupMetadataToUpload(backups, true, true, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, true, true, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_tryToUnmarkAlreadyUnmarkedBackup(t *testing.T) {
@@ -205,10 +205,10 @@ func TestGetBackupMetadataToUpload_tryToUnmarkAlreadyUnmarkedBackup(t *testing.T
 		},
 	}
 	toMark := "base_000000010000000000000002"
-	expectUploadObjectLen := 0
-	expectUploadObjectPaths := map[int]string{}
+	expectBackupsToMarkLen := 0
+	expectBackupsToMark := map[int]string{}
 
-	testGetBackupMetadataToUpload(backups, false, true, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	testGetBackupMetadataToUpload(backups, false, true, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func TestGetBackupMetadataToUpload_tryToUnmarkBackupWithMarkedIncrementBackups(t *testing.T) {
@@ -234,9 +234,9 @@ func TestGetBackupMetadataToUpload_tryToUnmarkBackupWithMarkedIncrementBackups(t
 		},
 	}
 	toMark := "base_000000010000000000000002"
-	expectUploadObjectLen := 0
-	expectUploadObjectPaths := map[int]string{}
-	testGetBackupMetadataToUpload(backups, false, true, toMark, expectUploadObjectLen, expectUploadObjectPaths, t)
+	expectBackupsToMarkLen := 0
+	expectBackupsToMark := map[int]string{}
+	testGetBackupMetadataToUpload(backups, false, true, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
 }
 
 func testGetBackupMetadataToUpload(
@@ -244,8 +244,8 @@ func testGetBackupMetadataToUpload(
 	toPermanent,
 	isErrorExpect bool,
 	toMark string,
-	expectUploadObjectLen int,
-	expectUploadObjectPaths map[int]string,
+	expectBackupsToMarkLen int,
+	expectBackupsToMark map[int]string,
 	t *testing.T) {
 	folder := testtools.MakeDefaultInMemoryStorageFolder()
 	baseBackupFolder := folder.GetSubFolder(utility.BaseBackupPath)
@@ -259,12 +259,14 @@ func testGetBackupMetadataToUpload(
 		err = baseBackupFolder.PutObject(backupName+"/"+utility.MetadataFileName, bytes.NewReader(metaBytes))
 		assert.NoError(t, err)
 	}
-	uploadObjects, err := internal.GetMarkedBackupMetadataToUpload(folder, toMark, toPermanent)
+	markHandler := internal.NewBackupMarkHandler(postgres.NewGenericBackupProvider(), folder)
+	backupsToMark, err := markHandler.GetBackupsToMark(toMark, toPermanent)
+
 	if !isErrorExpect {
 		assert.NoError(t, err)
-		assert.Equal(t, len(uploadObjects), expectUploadObjectLen)
-		for idx, path := range expectUploadObjectPaths {
-			assert.Equal(t, uploadObjects[idx].Path, path)
+		assert.Equal(t, len(backupsToMark), expectBackupsToMarkLen)
+		for idx, name := range expectBackupsToMark {
+			assert.Equal(t, backupsToMark[idx].Name(), name)
 		}
 	} else {
 		assert.Error(t, err)

@@ -84,7 +84,7 @@ func NewStorageDownloader(opts StorageSettings) (*StorageDownloader, error) {
 
 // BackupMeta downloads sentinel contents.
 func (sd *StorageDownloader) BackupMeta(name string) (models.Backup, error) {
-	backup := internal.NewBackup(sd.backupsFolder, name)
+	backup := internal.NewBackupMetaProvider(sd.backupsFolder, name)
 	var sentinel models.Backup
 	err := internal.FetchSentinel(backup, &sentinel)
 	if err != nil {
@@ -297,7 +297,7 @@ func (sp *StoragePurger) DeleteBackups(backups []models.Backup) error {
 	keys := make([]string, 0, len(backups)*2)
 	for idx := range backups {
 		backup := &backups[idx]
-		keys = append(keys, postgres.SentinelNameFromBackup(backup.BackupName))
+		keys = append(keys, internal.SentinelNameFromBackup(backup.BackupName))
 
 		dataObjects, _, err := sp.backupsFolder.GetSubFolder(backup.BackupName).ListFolder()
 		if err != nil {

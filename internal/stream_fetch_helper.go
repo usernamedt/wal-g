@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"github.com/wal-g/storages/storage"
 	"io"
 	"time"
 
@@ -33,11 +34,11 @@ func GetLogsDstSettings(operationLogsDstEnvVariable string) (dstFolder string, e
 
 // TODO : unit tests
 // downloadAndDecompressStream downloads, decompresses and writes stream to stdout
-func downloadAndDecompressStream(backup *Backup, writeCloser io.WriteCloser) error {
+func downloadAndDecompressStream(backupName string, baseBackupFolder storage.Folder, writeCloser io.WriteCloser) error {
 	defer writeCloser.Close()
 
 	for _, decompressor := range compression.Decompressors {
-		archiveReader, exists, err := TryDownloadFile(backup.BaseBackupFolder, GetStreamName(backup.Name, decompressor.FileExtension()))
+		archiveReader, exists, err := TryDownloadFile(baseBackupFolder, GetStreamName(backupName, decompressor.FileExtension()))
 		if err != nil {
 			return err
 		}
@@ -52,5 +53,5 @@ func downloadAndDecompressStream(backup *Backup, writeCloser io.WriteCloser) err
 		utility.LoggedClose(writeCloser, "")
 		return nil
 	}
-	return newArchiveNonExistenceError(fmt.Sprintf("Archive '%s' does not exist.\n", backup.Name))
+	return newArchiveNonExistenceError(fmt.Sprintf("Archive '%s' does not exist.\n", backupName))
 }

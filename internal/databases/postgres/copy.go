@@ -27,7 +27,7 @@ func HandleCopy(fromConfigFile string, toConfigFile string, backupName string, w
 
 func BackupCopyingInfo(backup *Backup, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
 	tracelog.InfoLogger.Print("Collecting backup files...")
-	var backupPrefix = path.Join(utility.BaseBackupPath, backup.Name)
+	var backupPrefix = path.Join(utility.BaseBackupPath, backup.BackupName)
 
 	var objects, err = storage.ListFolderRecursively(from)
 	if err != nil {
@@ -44,7 +44,7 @@ func getCopyingInfos(backupName string, from storage.Folder, to storage.Folder, 
 		return WildcardInfo(from, to)
 	}
 	tracelog.InfoLogger.Printf("Handle backupname '%s'.", backupName)
-	backup, err := ToPgBackupWithError(internal.GetBackupByName(backupName, utility.BaseBackupPath, from))
+	backup, err := ToPgBackupWithError(internal.GetBackupMetaProviderByName(backupName, utility.BaseBackupPath, from))
 	if err != nil {
 		return nil, err
 	}

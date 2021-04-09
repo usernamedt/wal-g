@@ -41,7 +41,7 @@ func TestStartCopy_WhenThereAreObjectsToCopy(t *testing.T) {
 func TestGetBackupCopyingInfo_WhenFolderIsEmpty(t *testing.T) {
 	var from = testtools.MakeDefaultInMemoryStorageFolder()
 	var to = testtools.MakeDefaultInMemoryStorageFolder()
-	var backup = postgres.NewPgBackup(from, "base_000000010000000000000002")
+	var backup = postgres.NewBackup(from, "base_000000010000000000000002")
 	var infos, err = postgres.BackupCopyingInfo(backup, from, to)
 	assert.NoError(t, err)
 	assert.Empty(t, infos)
@@ -50,7 +50,7 @@ func TestGetBackupCopyingInfo_WhenFolderIsEmpty(t *testing.T) {
 func TestGetBackupCopyingInfo_WhenFolderIsNotEmpty(t *testing.T) {
 	var from = testtools.CreateMockStorageFolderWithPermanentBackups(t)
 	var to = testtools.MakeDefaultInMemoryStorageFolder()
-	var backup = postgres.NewPgBackup(from, "base_000000010000000000000002")
+	var backup = postgres.NewBackup(from, "base_000000010000000000000002")
 	var infos, err = postgres.BackupCopyingInfo(backup, from, to)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(infos))
@@ -60,7 +60,7 @@ func TestGetBackupCopyingInfo_WhenFolderIsNotEmpty(t *testing.T) {
 func TestGetHistoryCopyingInfo_WhenFolderIsEmpty(t *testing.T) {
 	var from = testtools.MakeDefaultInMemoryStorageFolder()
 	var to = testtools.MakeDefaultInMemoryStorageFolder()
-	var backup = postgres.NewPgBackup(from, "base_000000010000000000000002")
+	var backup = postgres.NewBackup(from, "base_000000010000000000000002")
 	var infos, err = postgres.HistoryCopyingInfo(backup, from, to)
 	assert.NoError(t, err)
 	assert.Empty(t, infos)
@@ -69,7 +69,7 @@ func TestGetHistoryCopyingInfo_WhenFolderIsEmpty(t *testing.T) {
 func TestGetHistoryCopyingInfo_WhenThereIsNoHistoryObjects(t *testing.T) {
 	var from = testtools.CreateMockStorageFolder()
 	var to = testtools.MakeDefaultInMemoryStorageFolder()
-	var backup = postgres.NewPgBackup(from, "base_000000010000000000000002")
+	var backup = postgres.NewBackup(from, "base_000000010000000000000002")
 	var infos, err = postgres.HistoryCopyingInfo(backup, from, to)
 	assert.NoError(t, err)
 	assert.Empty(t, infos)

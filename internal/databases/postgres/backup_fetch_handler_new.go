@@ -2,15 +2,14 @@ package postgres
 
 import (
 	"fmt"
-	"github.com/wal-g/wal-g/internal"
-
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
 )
 
-func GetPgFetcherNew(dbDataDirectory, fileMask, restoreSpecPath string, skipRedundantTars bool) func(folder storage.Folder, backup Backup) {
-	return func(folder storage.Folder, backup Backup) {
+func GetPgFetcherNew(dbDataDirectory, fileMask, restoreSpecPath string, skipRedundantTars bool) func(folder storage.Folder, backupName string) {
+	return func(folder storage.Folder, backupName string) {
+		backup := NewBackup(folder.GetSubFolder(utility.BaseBackupPath), backupName)
 		filesToUnwrap, err := backup.GetFilesToUnwrap(fileMask)
 		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
 
@@ -30,7 +29,7 @@ func GetPgFetcherNew(dbDataDirectory, fileMask, restoreSpecPath string, skipRedu
 			tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n",
 				NewNonEmptyDbDataDirectoryError(dbDataDirectory))
 		}
-		config := NewFetchConfig(backup.Name,
+		config := NewFetchConfig(backupName,
 			utility.ResolveSymlink(dbDataDirectory), folder, spec, filesToUnwrap, skipRedundantTars)
 		err = deltaFetchRecursionNew(config)
 		tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
@@ -40,12 +39,8 @@ func GetPgFetcherNew(dbDataDirectory, fileMask, restoreSpecPath string, skipRedu
 // TODO : unit tests
 // deltaFetchRecursion function composes Backup object and recursively searches for necessary base backup
 func deltaFetchRecursionNew(cfg *FetchConfig) error {
-	backup, err := internal.GetBackupByName(cfg.backupName, utility.BaseBackupPath, cfg.folder)
-	if err != nil {
-		return err
-	}
-	pgBackup := ToPgBackup(backup)
-	sentinelDto, err := pgBackup.GetSentinel()
+	backup := NewBackup(cfg.folder.GetSubFolder(utility.BaseBackupPath), cfg.backupName)
+	sentinelDto, err := backup.GetSentinel()
 	if err != nil {
 		return err
 	}
@@ -58,7 +53,7 @@ func deltaFetchRecursionNew(cfg *FetchConfig) error {
 		if err != nil {
 			return err
 		}
-		unwrapResult, err := pgBackup.unwrapNew(cfg.dbDataDirectory, sentinelDto, cfg.filesToUnwrap,
+		unwrapResult, err := backup.unwrapNew(cfg.dbDataDirectory, sentinelDto, cfg.filesToUnwrap,
 			false, cfg.skipRedundantTars)
 		if err != nil {
 			return err
@@ -81,7 +76,7 @@ func deltaFetchRecursionNew(cfg *FetchConfig) error {
 	}
 
 	tracelog.InfoLogger.Printf("%x reached. Applying base backup... \n", *(sentinelDto.BackupStartLSN))
-	_, err = pgBackup.unwrapNew(cfg.dbDataDirectory, sentinelDto, cfg.filesToUnwrap,
+	_, err = backup.unwrapNew(cfg.dbDataDirectory, sentinelDto, cfg.filesToUnwrap,
 		false, cfg.skipRedundantTars)
 	return err
 }

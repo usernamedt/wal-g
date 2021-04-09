@@ -43,27 +43,23 @@ func (err NoBackupsFoundError) Error() string {
 // Backup contains information about a valid Postgres backup
 // generated and uploaded by WAL-G.
 type Backup struct {
-	internal.Backup
+	Name   string
+	Folder storage.Folder
+
+	metaProvider internal.BackupMetaProvider
 	SentinelDto      *BackupSentinelDto // used for storage query caching
 }
 
-func NewPgBackup(baseBackupFolder storage.Folder, name string) *Backup {
-	return ToPgBackup(internal.NewBackup(baseBackupFolder, name))
-}
-
-func ToPgBackup(backup *internal.Backup) *Backup {
-	return &Backup{Backup: *backup}
-}
-
-func ToPgBackupWithError(backup *internal.Backup, err error) (*Backup, error) {
-	if backup == nil {
-		return nil, err
+func NewBackup(baseBackupFolder storage.Folder,  name string) *Backup {
+	return &Backup{
+		Name:         name,
+		Folder:       baseBackupFolder,
+		metaProvider: *internal.NewBackupMetaProvider(baseBackupFolder, name),
 	}
-	return ToPgBackup(backup), err
 }
 
 func (backup *Backup) getTarPartitionFolder() storage.Folder {
-	return backup.BaseBackupFolder.GetSubFolder(backup.Name + internal.TarPartitionFolderName)
+	return backup.Folder.GetSubFolder(backup.Name + internal.TarPartitionFolderName)
 }
 
 func (backup *Backup) GetTarNames() ([]string, error) {
@@ -84,7 +80,7 @@ func (backup *Backup) GetSentinel() (BackupSentinelDto, error) {
 		return *backup.SentinelDto, nil
 	}
 	sentinelDto := BackupSentinelDto{}
-	err := backup.FetchSentinel(sentinelDto)
+	err := backup.metaProvider.FetchSentinel(sentinelDto)
 	if err != nil {
 		return sentinelDto, err
 	}
@@ -95,7 +91,7 @@ func (backup *Backup) GetSentinel() (BackupSentinelDto, error) {
 
 func (backup *Backup) FetchMeta() (ExtendedMetadataDto, error) {
 	extendedMetadataDto := ExtendedMetadataDto{}
-	err := backup.FetchMetadata(&extendedMetadataDto)
+	err := backup.metaProvider.FetchMetadata(&extendedMetadataDto)
 	if err != nil {
 		return ExtendedMetadataDto{}, errors.Wrap(err, "failed to unmarshal metadata")
 	}

@@ -181,10 +181,10 @@ func fetchLogs(folder storage.Folder, dstDir string, startTs time.Time, endTs ti
 	return nil
 }
 
-func getBinlogSinceTs(folder storage.Folder, backup *internal.Backup) (time.Time, error) {
+func getBinlogSinceTs(folder storage.Folder, backup *internal.BackupMetaProvider) (time.Time, error) {
 	startTs := utility.MaxTime // far future
 	var streamSentinel StreamSentinelDto
-	err := internal.FetchSentinel(backup, &streamSentinel)
+	err := backup.FetchSentinel(&streamSentinel)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -196,7 +196,7 @@ func getBinlogSinceTs(folder storage.Folder, backup *internal.Backup) (time.Time
 		return time.Time{}, err
 	}
 	for _, sentinel := range sentinels {
-		if strings.HasPrefix(sentinel.GetName(), backup.Name) {
+		if strings.HasPrefix(sentinel.GetName(), backup.BackupName) {
 			tracelog.InfoLogger.Printf("Backup sentinel file: %s (%s)", sentinel.GetName(), sentinel.GetLastModified())
 			if sentinel.GetLastModified().Before(startTs) {
 				startTs = sentinel.GetLastModified()

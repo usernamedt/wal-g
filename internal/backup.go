@@ -3,15 +3,13 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/wal-g/wal-g/internal/databases/postgres"
-	"io/ioutil"
-	"sort"
-	"strings"
-
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
+	"io/ioutil"
+	"sort"
+	"strings"
 )
 
 type NoBackupsFoundError struct {
@@ -26,33 +24,33 @@ func (err NoBackupsFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
-// Backup contains information about a valid backup
-// generated and uploaded by WAL-G.
-type Backup struct {
-	BaseBackupFolder storage.Folder
-	Name             string
+// BackupMetaProvider provides basic functionality
+// to fetch backup-related information from storage
+type BackupMetaProvider struct {
+	BackupFolder storage.Folder
+	BackupName   string
 }
 
-func NewBackup(baseBackupFolder storage.Folder, name string) *Backup {
-	return &Backup{baseBackupFolder, name}
+func NewBackupMetaProvider(baseBackupFolder storage.Folder, name string) *BackupMetaProvider {
+	return &BackupMetaProvider{baseBackupFolder, name}
 }
 
-// GetStopSentinelPath returns sentinel path.
-func (backup *Backup) GetStopSentinelPath() string {
-	return postgres.SentinelNameFromBackup(backup.Name)
+// getStopSentinelPath returns sentinel path.
+func (backup *BackupMetaProvider) getStopSentinelPath() string {
+	return SentinelNameFromBackup(backup.BackupName)
 }
 
-func (backup *Backup) GetMetadataPath() string {
-	return backup.Name + "/" + utility.MetadataFileName
+func (backup *BackupMetaProvider) getMetadataPath() string {
+	return backup.BackupName + "/" + utility.MetadataFileName
 }
 
-// CheckExistence checks that the specified backup exists.
-func (backup *Backup) CheckExistence() (bool, error) {
-	return backup.BaseBackupFolder.Exists(backup.GetStopSentinelPath())
+// SentinelExists checks that the sentinel file of the specified backup exists.
+func (backup *BackupMetaProvider) SentinelExists() (bool, error) {
+	return backup.BackupFolder.Exists(backup.getStopSentinelPath())
 }
 
 // TODO : unit tests
-func (backup *Backup) FetchSentinel(sentinelDto interface{}) error {
+func (backup *BackupMetaProvider) FetchSentinel(sentinelDto interface{}) error {
 	sentinelDtoData, err := backup.fetchSentinelBytes()
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch sentinel")
@@ -62,8 +60,8 @@ func (backup *Backup) FetchSentinel(sentinelDto interface{}) error {
 }
 
 // TODO : unit tests
-func (backup *Backup) fetchSentinelBytes() ([]byte, error) {
-	backupReaderMaker := NewStorageReaderMaker(backup.BaseBackupFolder, backup.GetStopSentinelPath())
+func (backup *BackupMetaProvider) fetchSentinelBytes() ([]byte, error) {
+	backupReaderMaker := NewStorageReaderMaker(backup.BackupFolder, backup.getStopSentinelPath())
 	backupReader, err := backupReaderMaker.Reader()
 	if err != nil {
 		return make([]byte, 0), err
@@ -76,7 +74,7 @@ func (backup *Backup) fetchSentinelBytes() ([]byte, error) {
 }
 
 // TODO : unit tests
-func (backup *Backup) FetchMetadata(metadataDto interface{}) error {
+func (backup *BackupMetaProvider) FetchMetadata(metadataDto interface{}) error {
 	sentinelDtoData, err := backup.fetchSentinelBytes()
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch sentinel")
@@ -86,8 +84,8 @@ func (backup *Backup) FetchMetadata(metadataDto interface{}) error {
 }
 
 // TODO : unit tests
-func (backup *Backup) fetchMetadataBytes() ([]byte, error) {
-	backupReaderMaker := NewStorageReaderMaker(backup.BaseBackupFolder, backup.GetMetadataPath())
+func (backup *BackupMetaProvider) fetchMetadataBytes() ([]byte, error) {
+	backupReaderMaker := NewStorageReaderMaker(backup.BackupFolder, backup.getMetadataPath())
 	backupReader, err := backupReaderMaker.Reader()
 	if err != nil {
 		return make([]byte, 0), err
@@ -97,6 +95,32 @@ func (backup *Backup) fetchMetadataBytes() ([]byte, error) {
 		return nil, errors.Wrap(err, "failed to fetch sentinel")
 	}
 	return metadata, nil
+}
+
+func GetBackupMetaProviderByName(backupName, subfolder string, folder storage.Folder) (*BackupMetaProvider, error) {
+	baseBackupFolder := folder.GetSubFolder(subfolder)
+
+	var backup *BackupMetaProvider
+	if backupName == LatestString {
+		latest, err := getLatestBackupName(folder)
+		if err != nil {
+			return nil, err
+		}
+		tracelog.InfoLogger.Printf("LATEST backup is: '%s'\n", latest)
+
+		backup = NewBackupMetaProvider(baseBackupFolder, latest)
+	} else {
+		backup = NewBackupMetaProvider(baseBackupFolder, backupName)
+
+		exists, err := backup.SentinelExists()
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, NewBackupNonExistenceError(backupName)
+		}
+	}
+	return backup, nil
 }
 
 // TODO : unit tests
@@ -194,4 +218,8 @@ func getGarbageFromPrefix(folders []storage.Folder, nonGarbage []BackupTime) []s
 		garbage = append(garbage, backupName)
 	}
 	return garbage
+}
+
+func SentinelNameFromBackup(backupName string) string {
+	return backupName + utility.SentinelSuffix
 }

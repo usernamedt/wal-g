@@ -42,7 +42,7 @@ var backupFetchCmd = &cobra.Command{
 		folder, err := internal.ConfigureFolder()
 		tracelog.ErrorLogger.FatalOnError(err)
 
-		var pgFetcher func(folder storage.Folder, backup internal.Backup)
+		var pgFetcher func(folder storage.Folder, backupName string)
 		reverseDeltaUnpack = reverseDeltaUnpack || viper.GetBool(internal.UseReverseUnpackSetting)
 		skipRedundantTars = skipRedundantTars || viper.GetBool(internal.SkipRedundantTarsSetting)
 		if reverseDeltaUnpack {
@@ -51,7 +51,7 @@ var backupFetchCmd = &cobra.Command{
 			pgFetcher = postgres.GetPgFetcherOld(args[0], fileMask, restoreSpec)
 		}
 
-		postgres.HandleBackupFetch(folder, targetBackupSelector, pgFetcher)
+		internal.HandleBackupFetch(folder, targetBackupSelector, pgFetcher)
 	},
 }
 
@@ -62,7 +62,7 @@ func createTargetFetchBackupSelector(cmd *cobra.Command, args []string, targetUs
 		targetName = args[1]
 	}
 
-	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName)
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName, postgres.NewGenericBackupProvider())
 	if err != nil {
 		fmt.Println(cmd.UsageString())
 		return nil, err

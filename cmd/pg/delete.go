@@ -59,7 +59,7 @@ func runDeleteBefore(cmd *cobra.Command, args []string) {
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	permanentBackups, permanentWals := internal.GetPermanentObjects(folder)
+	permanentBackups, permanentWals := postgres.GetPermanentBackupsAndWals(folder)
 	if len(permanentBackups) > 0 {
 		tracelog.InfoLogger.Printf("Found permanent objects: backups=%v, wals=%v\n",
 			permanentBackups, permanentWals)
@@ -75,7 +75,7 @@ func runDeleteRetain(cmd *cobra.Command, args []string) {
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	permanentBackups, permanentWals := internal.GetPermanentObjects(folder)
+	permanentBackups, permanentWals := postgres.GetPermanentBackupsAndWals(folder)
 	if len(permanentBackups) > 0 {
 		tracelog.InfoLogger.Printf("Found permanent objects: backups=%v, wals=%v\n",
 			permanentBackups, permanentWals)
@@ -97,7 +97,7 @@ func runDeleteEverything(cmd *cobra.Command, args []string) {
 		forceModifier = true
 	}
 
-	permanentBackups, permanentWals := internal.GetPermanentObjects(folder)
+	permanentBackups, permanentWals := postgres.GetPermanentBackupsAndWals(folder)
 	if len(permanentBackups) > 0 {
 		if !forceModifier {
 			tracelog.ErrorLogger.Fatalf("Found permanent objects: backups=%v, wals=%v\n",
@@ -117,7 +117,7 @@ func runDeleteTarget(cmd *cobra.Command, args []string) {
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	permanentBackups, permanentWals := internal.GetPermanentObjects(folder)
+	permanentBackups, permanentWals := postgres.GetPermanentBackupsAndWals(folder)
 	if len(permanentBackups) > 0 {
 		tracelog.InfoLogger.Printf("Found permanent objects: backups=%v, wals=%v\n",
 			permanentBackups, permanentWals)
@@ -194,7 +194,7 @@ func newPostgresBackupObject(incrementBase, incrementFrom string,
 		baseBackupName:    incrementBase,
 		incrementFromName: incrementFrom,
 		creationTime:      creationTime,
-		BackupName:        internal.FetchPgBackupName(object),
+		BackupName:        postgres.FetchPgBackupName(object),
 	}
 }
 
@@ -249,19 +249,19 @@ func makePostgresBackupObjects(
 
 func makePostgresPermanentFunc(permanentBackups, permanentWals map[string]bool) func(object storage.Object) bool {
 	return func(object storage.Object) bool {
-		return internal.IsPermanent(object.GetName(), permanentBackups, permanentWals)
+		return postgres.IsPermanent(object.GetName(), permanentBackups, permanentWals)
 	}
 }
 
 func makeLessFunc(startTimeByBackupName map[string]time.Time) func(storage.Object, storage.Object) bool {
 	return func(object1 storage.Object, object2 storage.Object) bool {
-		backupName1 := internal.FetchPgBackupName(object1)
+		backupName1 := postgres.FetchPgBackupName(object1)
 		if backupName1 == "" {
 			// we can't compare non-backup storage objects (probably WAL segments) by start time,
 			// so use the segment number comparator instead
 			return postgresSegmentNoLess(object1, object2)
 		}
-		backupName2 := internal.FetchPgBackupName(object2)
+		backupName2 := postgres.FetchPgBackupName(object2)
 		if backupName2 == "" {
 			return postgresSegmentNoLess(object1, object2)
 		}
@@ -321,7 +321,7 @@ func postgresTimelineAndSegmentNoLess(object1 storage.Object, object2 storage.Ob
 }
 
 func postgresGetIncrementInfo(folder storage.Folder, object storage.Object) (string, string, bool, error) {
-	backup := internal.NewBackup(folder.GetSubFolder(utility.BaseBackupPath), internal.FetchPgBackupName(object))
+	backup := postgres.NewBackup(folder.GetSubFolder(utility.BaseBackupPath), postgres.FetchPgBackupName(object))
 	sentinel, err := backup.GetSentinel()
 	if err != nil {
 		return "", "", true, err
@@ -340,7 +340,7 @@ func createTargetDeleteBackupSelector(cmd *cobra.Command, args []string, targetU
 		targetName = args[0]
 	}
 
-	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName)
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName, postgres.NewGenericBackupProvider())
 	if err != nil {
 		fmt.Println(cmd.UsageString())
 		return nil, err

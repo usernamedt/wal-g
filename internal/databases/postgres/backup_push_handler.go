@@ -249,7 +249,7 @@ func configureDeltaBackup(folder storage.Folder, deltaBaseSelector internal.Back
 		tracelog.ErrorLogger.FatalError(err)
 	}
 
-	previousBackup := NewPgBackup(baseBackupFolder, previousBackupName)
+	previousBackup := NewBackup(baseBackupFolder, previousBackupName)
 	previousBackupSentinelDto, err := previousBackup.GetSentinel()
 	tracelog.ErrorLogger.FatalOnError(err)
 
@@ -288,7 +288,7 @@ func configureDeltaBackup(folder storage.Folder, deltaBaseSelector internal.Back
 			previousBackupName = *previousBackupSentinelDto.IncrementFullName
 		}
 
-		previousBackup := NewPgBackup(baseBackupFolder, previousBackupName)
+		previousBackup := NewBackup(baseBackupFolder, previousBackupName)
 		previousBackupSentinelDto, err = previousBackup.GetSentinel()
 		tracelog.ErrorLogger.FatalOnError(err)
 	}
@@ -320,7 +320,7 @@ func uploadMetadata(uploader *internal.Uploader, sentinelDto *BackupSentinelDto,
 
 // TODO : unit tests
 func UploadSentinel(uploader internal.UploaderProvider, sentinelDto interface{}, backupName string) error {
-	sentinelName := SentinelNameFromBackup(backupName)
+	sentinelName := internal.SentinelNameFromBackup(backupName)
 
 	dtoBody, err := json.Marshal(sentinelDto)
 	if err != nil {
@@ -328,10 +328,6 @@ func UploadSentinel(uploader internal.UploaderProvider, sentinelDto interface{},
 	}
 
 	return uploader.Upload(sentinelName, bytes.NewReader(dtoBody))
-}
-
-func SentinelNameFromBackup(backupName string) string {
-	return backupName + utility.SentinelSuffix
 }
 
 func checkPgVersionAndPgControl(archiveDirectory string) {

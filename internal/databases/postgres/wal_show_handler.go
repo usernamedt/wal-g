@@ -16,16 +16,16 @@ const (
 
 // TimelineInfo contains information about some timeline in storage
 type TimelineInfo struct {
-	Id               uint32                   `json:"id"`
-	ParentId         uint32                   `json:"parent_id"`
-	SwitchPointLsn   uint64                   `json:"switch_point_lsn"`
-	StartSegment     string                   `json:"start_segment"`
-	EndSegment       string                   `json:"end_segment"`
-	SegmentsCount    int                      `json:"segments_count"`
-	MissingSegments  []string                 `json:"missing_segments"`
-	Backups          []*internal.BackupDetail `json:"backups,omitempty"`
-	SegmentRangeSize uint64                   `json:"segment_range_size"`
-	Status           string                   `json:"status"`
+	Id               uint32          `json:"id"`
+	ParentId         uint32          `json:"parent_id"`
+	SwitchPointLsn   uint64          `json:"switch_point_lsn"`
+	StartSegment     string          `json:"start_segment"`
+	EndSegment       string          `json:"end_segment"`
+	SegmentsCount    int             `json:"segments_count"`
+	MissingSegments  []string        `json:"missing_segments"`
+	Backups          []*BackupDetail `json:"backups,omitempty"`
+	SegmentRangeSize uint64          `json:"segment_range_size"`
+	Status           string          `json:"status"`
 }
 
 func NewTimelineInfo(walSegments *WalSegmentsSequence, historyRecords []*TimelineHistoryRecord) (*TimelineInfo, error) {
@@ -185,8 +185,8 @@ func addBackupsInfo(timelineInfos []*TimelineInfo, rootFolder storage.Folder) ([
 
 // getBackupsInRange returns backups taken in range [startSegmentName, endSegmentName]
 func getBackupsInRange(startSegmentName, endSegmentName string, timeline uint32,
-	backups []internal.BackupDetail) ([]*internal.BackupDetail, error) {
-	filteredBackups := make([]*internal.BackupDetail, 0)
+	backups []BackupDetail) ([]*BackupDetail, error) {
+	filteredBackups := make([]*BackupDetail, 0)
 
 	for idx := range backups {
 		backup := &backups[idx]
