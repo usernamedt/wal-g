@@ -1,13 +1,11 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
 	"github.com/wal-g/wal-g/utility"
-	"io/ioutil"
 	"sort"
 	"strings"
 )
@@ -22,105 +20,6 @@ func NewNoBackupsFoundError() NoBackupsFoundError {
 
 func (err NoBackupsFoundError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
-}
-
-// BackupMetaProvider provides basic functionality
-// to fetch backup-related information from storage
-type BackupMetaProvider struct {
-	BackupFolder storage.Folder
-	BackupName   string
-}
-
-func NewBackupMetaProvider(baseBackupFolder storage.Folder, name string) *BackupMetaProvider {
-	return &BackupMetaProvider{baseBackupFolder, name}
-}
-
-// getStopSentinelPath returns sentinel path.
-func (backup *BackupMetaProvider) getStopSentinelPath() string {
-	return SentinelNameFromBackup(backup.BackupName)
-}
-
-func (backup *BackupMetaProvider) getMetadataPath() string {
-	return backup.BackupName + "/" + utility.MetadataFileName
-}
-
-// SentinelExists checks that the sentinel file of the specified backup exists.
-func (backup *BackupMetaProvider) SentinelExists() (bool, error) {
-	return backup.BackupFolder.Exists(backup.getStopSentinelPath())
-}
-
-// TODO : unit tests
-func (backup *BackupMetaProvider) FetchSentinel(sentinelDto interface{}) error {
-	sentinelDtoData, err := backup.fetchSentinelBytes()
-	if err != nil {
-		return errors.Wrap(err, "failed to fetch sentinel")
-	}
-	err = json.Unmarshal(sentinelDtoData, sentinelDto)
-	return errors.Wrap(err, "failed to unmarshal sentinel")
-}
-
-// TODO : unit tests
-func (backup *BackupMetaProvider) fetchSentinelBytes() ([]byte, error) {
-	backupReaderMaker := NewStorageReaderMaker(backup.BackupFolder, backup.getStopSentinelPath())
-	backupReader, err := backupReaderMaker.Reader()
-	if err != nil {
-		return make([]byte, 0), err
-	}
-	sentinelDtoData, err := ioutil.ReadAll(backupReader)
-	if err != nil {
-		return sentinelDtoData, errors.Wrap(err, "failed to fetch sentinel")
-	}
-	return sentinelDtoData, nil
-}
-
-// TODO : unit tests
-func (backup *BackupMetaProvider) FetchMetadata(metadataDto interface{}) error {
-	sentinelDtoData, err := backup.fetchSentinelBytes()
-	if err != nil {
-		return errors.Wrap(err, "failed to fetch sentinel")
-	}
-	err = json.Unmarshal(sentinelDtoData, metadataDto)
-	return errors.Wrap(err, "failed to unmarshal sentinel")
-}
-
-// TODO : unit tests
-func (backup *BackupMetaProvider) fetchMetadataBytes() ([]byte, error) {
-	backupReaderMaker := NewStorageReaderMaker(backup.BackupFolder, backup.getMetadataPath())
-	backupReader, err := backupReaderMaker.Reader()
-	if err != nil {
-		return make([]byte, 0), err
-	}
-	metadata, err := ioutil.ReadAll(backupReader)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch sentinel")
-	}
-	return metadata, nil
-}
-
-func GetBackupMetaProviderByName(backupName, subfolder string, folder storage.Folder) (*BackupMetaProvider, error) {
-	baseBackupFolder := folder.GetSubFolder(subfolder)
-
-	var backup *BackupMetaProvider
-	if backupName == LatestString {
-		latest, err := getLatestBackupName(folder)
-		if err != nil {
-			return nil, err
-		}
-		tracelog.InfoLogger.Printf("LATEST backup is: '%s'\n", latest)
-
-		backup = NewBackupMetaProvider(baseBackupFolder, latest)
-	} else {
-		backup = NewBackupMetaProvider(baseBackupFolder, backupName)
-
-		exists, err := backup.SentinelExists()
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			return nil, NewBackupNonExistenceError(backupName)
-		}
-	}
-	return backup, nil
 }
 
 // TODO : unit tests

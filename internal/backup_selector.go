@@ -120,7 +120,7 @@ func NewBackupNameSelector(backupName string) (BackupNameSelector, error) {
 }
 
 func (s BackupNameSelector) Select(folder storage.Folder) (string, error) {
-	_, err := GetBackupMetaProviderByName(s.backupName, utility.BaseBackupPath, folder)
+	_, err := GetBackupMetaFetcherByName(s.backupName, utility.BaseBackupPath, folder)
 	if err != nil {
 		return "", err
 	}

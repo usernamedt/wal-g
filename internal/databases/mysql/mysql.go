@@ -181,7 +181,7 @@ func fetchLogs(folder storage.Folder, dstDir string, startTs time.Time, endTs ti
 	return nil
 }
 
-func getBinlogSinceTs(folder storage.Folder, backup *internal.BackupMetaProvider) (time.Time, error) {
+func getBinlogSinceTs(folder storage.Folder, backup *internal.BackupMetaFetcher) (time.Time, error) {
 	startTs := utility.MaxTime // far future
 	var streamSentinel StreamSentinelDto
 	err := backup.FetchSentinel(&streamSentinel)

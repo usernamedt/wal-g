@@ -11,7 +11,7 @@ import (
 func HandleCatchupFetch(folder storage.Folder, dbDirectory, backupName string, useNewUnwrap bool) {
 	dbDirectory = utility.ResolveSymlink(dbDirectory)
 
-	backup, err := ToPgBackupWithError(internal.GetBackupMetaProviderByName(backupName, utility.CatchupPath, folder))
+	backup, err := ToPgBackupWithError(internal.GetBackupMetaFetcherByName(backupName, utility.CatchupPath, folder))
 	tracelog.ErrorLogger.FatalfOnError("Failed get backup by name: %v", err)
 
 	filesToUnwrap, err := backup.GetFilesToUnwrap("")

@@ -46,7 +46,7 @@ type Backup struct {
 	Name   string
 	Folder storage.Folder
 
-	metaProvider internal.BackupMetaProvider
+	metaProvider internal.BackupMetaFetcher
 	SentinelDto      *BackupSentinelDto // used for storage query caching
 }
 
@@ -54,7 +54,7 @@ func NewBackup(baseBackupFolder storage.Folder,  name string) *Backup {
 	return &Backup{
 		Name:         name,
 		Folder:       baseBackupFolder,
-		metaProvider: *internal.NewBackupMetaProvider(baseBackupFolder, name),
+		metaProvider: *internal.NewBackupMetaFetcher(baseBackupFolder, name),
 	}
 }
 

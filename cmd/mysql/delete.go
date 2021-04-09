@@ -145,7 +145,7 @@ func tryFetchBinlogName(folder storage.Folder, object storage.Object) (string, b
 	}
 	name = strings.Replace(name, utility.SentinelSuffix, "", 1)
 	baseBackupFolder := folder.GetSubFolder(utility.BaseBackupPath)
-	metaProvider := internal.NewBackupMetaProvider(baseBackupFolder, name)
+	metaProvider := internal.NewBackupMetaFetcher(baseBackupFolder, name)
 	var sentinel mysql.StreamSentinelDto
 	err := metaProvider.FetchSentinel(&sentinel)
 	if err != nil {

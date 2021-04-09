@@ -44,7 +44,7 @@ func getCopyingInfos(backupName string, from storage.Folder, to storage.Folder, 
 		return WildcardInfo(from, to)
 	}
 	tracelog.InfoLogger.Printf("Handle backupname '%s'.", backupName)
-	backup, err := ToPgBackupWithError(internal.GetBackupMetaProviderByName(backupName, utility.BaseBackupPath, from))
+	backup, err := ToPgBackupWithError(internal.GetBackupMetaFetcherByName(backupName, utility.BaseBackupPath, from))
 	if err != nil {
 		return nil, err
 	}
