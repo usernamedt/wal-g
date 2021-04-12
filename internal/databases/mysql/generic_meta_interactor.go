@@ -17,7 +17,7 @@ func NewGenericMetaInteractor() GenericMetaInteractor {
 	}
 }
 
-type GenericMetaFetcher struct {}
+type GenericMetaFetcher struct{}
 
 func NewGenericMetaFetcher() GenericMetaFetcher {
 	return GenericMetaFetcher{}
@@ -32,21 +32,21 @@ func (mf GenericMetaFetcher) Fetch(backupName string, backupFolder storage.Folde
 	}
 
 	return internal.GenericMetadata{
-		BackupName:            backupName,
-		UncompressedSize:      sentinel.UncompressedSize,
-		CompressedSize:        sentinel.CompressedSize,
-		Hostname:              sentinel.Hostname,
-		StartTime:             sentinel.StartLocalTime,
-		FinishTime:            sentinel.StopLocalTime,
-		IsPermanent:           sentinel.IsPermanent,
+		BackupName:       backupName,
+		UncompressedSize: sentinel.UncompressedSize,
+		CompressedSize:   sentinel.CompressedSize,
+		Hostname:         sentinel.Hostname,
+		StartTime:        sentinel.StartLocalTime,
+		FinishTime:       sentinel.StopLocalTime,
+		IsPermanent:      sentinel.IsPermanent,
 		FetchIncrementDetails: func() (bool, internal.IncrementDetails, error) {
 			return false, internal.IncrementDetails{}, nil
 		},
-		UserData:              sentinel.UserData,
+		UserData: sentinel.UserData,
 	}, nil
 }
 
-type GenericMetaSetter struct {}
+type GenericMetaSetter struct{}
 
 func NewGenericMetaSetter() GenericMetaSetter {
 	return GenericMetaSetter{}

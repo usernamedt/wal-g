@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	PgControlPath          = "/global/pg_control"
+	PgControlPath = "/global/pg_control"
 )
 
 var UnwrapAll map[string]bool = nil
@@ -32,7 +32,7 @@ var regexpPgBackupName = regexp.MustCompile(patternPgBackupName)
 // generated and uploaded by WAL-G.
 type Backup struct {
 	internal.Backup
-	SentinelDto      *BackupSentinelDto // used for storage query caching
+	SentinelDto *BackupSentinelDto // used for storage query caching
 }
 
 func ToPgBackup(source internal.Backup) (output Backup) {

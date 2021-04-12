@@ -127,7 +127,9 @@ func (bundle *Bundle) NewTarBall(dedicatedUploader bool) internal.TarBall {
 func (bundle *Bundle) getIncrementBaseLsn() *uint64 { return bundle.IncrementFromLsn }
 
 // GetIncrementBaseFiles returns list of Files from previous backup
-func (bundle *Bundle) getIncrementBaseFiles() internal.BackupFileList { return bundle.IncrementFromFiles }
+func (bundle *Bundle) getIncrementBaseFiles() internal.BackupFileList {
+	return bundle.IncrementFromFiles
+}
 
 // TODO : unit tests
 // checkTimelineChanged compares timelines of pg_backup_start() and pg_backup_stop()

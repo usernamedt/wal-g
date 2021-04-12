@@ -13,11 +13,11 @@ type GenericMetaInteractor struct {
 func NewGenericMetaInteractor() GenericMetaInteractor {
 	return GenericMetaInteractor{
 		GenericMetaFetcher: NewGenericMetaFetcher(),
-		GenericMetaSetter: NewGenericMetaSetter(),
+		GenericMetaSetter:  NewGenericMetaSetter(),
 	}
 }
 
-type GenericMetaFetcher struct {}
+type GenericMetaFetcher struct{}
 
 func NewGenericMetaFetcher() GenericMetaFetcher {
 	return GenericMetaFetcher{}
@@ -31,19 +31,19 @@ func (mf GenericMetaFetcher) Fetch(backupName string, backupFolder storage.Folde
 	}
 
 	return internal.GenericMetadata{
-		BackupName: backupName,
-		UncompressedSize: meta.UncompressedSize,
-		CompressedSize: meta.CompressedSize,
-		Hostname: meta.Hostname,
-		StartTime: meta.StartTime,
-		FinishTime: meta.FinishTime,
-		IsPermanent: meta.IsPermanent,
+		BackupName:            backupName,
+		UncompressedSize:      meta.UncompressedSize,
+		CompressedSize:        meta.CompressedSize,
+		Hostname:              meta.Hostname,
+		StartTime:             meta.StartTime,
+		FinishTime:            meta.FinishTime,
+		IsPermanent:           meta.IsPermanent,
 		FetchIncrementDetails: makeFetchIncrementDetails(backup),
-		UserData: meta.UserData,
+		UserData:              meta.UserData,
 	}, nil
 }
 
-type GenericMetaSetter struct {}
+type GenericMetaSetter struct{}
 
 func NewGenericMetaSetter() GenericMetaSetter {
 	return GenericMetaSetter{}
@@ -72,9 +72,9 @@ func makeFetchIncrementDetails(backup Backup) func() (bool, internal.IncrementDe
 
 		if sentinel.IsIncremental() {
 			return true, internal.IncrementDetails{
-				IncrementFrom: *sentinel.IncrementFrom,
+				IncrementFrom:     *sentinel.IncrementFrom,
 				IncrementFullName: *sentinel.IncrementFullName,
-				IncrementCount: *sentinel.IncrementCount,
+				IncrementCount:    *sentinel.IncrementCount,
 			}, nil
 		}
 		return false, internal.IncrementDetails{}, nil

@@ -6,7 +6,7 @@ import (
 )
 
 type GenericMetadata struct {
-	BackupName		 string
+	BackupName       string
 	UncompressedSize int64
 	CompressedSize   int64
 	Hostname         string

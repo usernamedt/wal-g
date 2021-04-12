@@ -10,4 +10,3 @@ func TestBackupListFlagsFindsBackups(t *testing.T) {
 	folder := testtools.CreateMockStorageFolder()
 	postgres.HandleBackupListWithFlags(folder, true, false, false)
 }
-

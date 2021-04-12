@@ -49,7 +49,6 @@ func DownloadFile(folder storage.Folder, filename, ext string, writeCloser io.Wr
 	return nil
 }
 
-
 func TryDownloadFile(folder storage.Folder, path string) (walFileReader io.ReadCloser, exists bool, err error) {
 	walFileReader, err = folder.ReadObject(path)
 	if err == nil {
@@ -179,4 +178,3 @@ func DownloadFileTo(folder storage.Folder, fileName string, dstPath string) erro
 	defer utility.LoggedClose(reader, "")
 	return ioextensions.CreateFileWith(dstPath, reader)
 }
-

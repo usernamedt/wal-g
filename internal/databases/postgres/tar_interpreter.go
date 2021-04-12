@@ -13,7 +13,6 @@ import (
 	"github.com/wal-g/wal-g/utility"
 )
 
-
 // FileTarInterpreter extracts input to disk.
 type FileTarInterpreter struct {
 	DBDataDirectory string

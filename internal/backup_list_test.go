@@ -16,7 +16,6 @@ func TestBackupListFindsBackups(t *testing.T) {
 	internal.DefaultHandleBackupList(folder)
 }
 
-
 var backups = []internal.BackupTime{
 	{
 		BackupName:  "base_123",

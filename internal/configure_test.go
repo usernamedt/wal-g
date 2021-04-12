@@ -2,11 +2,11 @@ package internal_test
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/testtools"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
-	"github.com/wal-g/wal-g/testtools"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
