@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"os"
 	"strings"
 
@@ -27,7 +28,7 @@ var (
 			err := internal.AssertRequiredSettingsSet()
 			tracelog.ErrorLogger.FatalOnError(err)
 			if viper.IsSet(internal.PgWalSize) {
-				internal.SetWalSize(viper.GetUint64(internal.PgWalSize))
+				postgres.SetWalSize(viper.GetUint64(internal.PgWalSize))
 			}
 		},
 	}

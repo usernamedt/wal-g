@@ -2,11 +2,10 @@ package mysql
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"os"
 	"path"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"

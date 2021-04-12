@@ -2,8 +2,8 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/wal-g/tracelog"
@@ -36,14 +36,14 @@ var (
 		Short: backupPushShortDescription, // TODO : improve description
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader, err := internal.ConfigureWalUploader()
+			uploader, err := postgres.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
 			verifyPageChecksums = verifyPageChecksums || viper.GetBool(internal.VerifyPageChecksumsSetting)
 			storeAllCorruptBlocks = storeAllCorruptBlocks || viper.GetBool(internal.StoreAllCorruptBlocksSetting)
-			tarBallComposerType := internal.RegularComposer
+			tarBallComposerType := postgres.RegularComposer
 			useRatingComposer = useRatingComposer || viper.GetBool(internal.UseRatingComposerSetting)
 			if useRatingComposer {
-				tarBallComposerType = internal.RatingComposer
+				tarBallComposerType = postgres.RatingComposer
 			}
 			if deltaFromName == "" {
 				deltaFromName = viper.GetString(internal.DeltaFromNameSetting)
@@ -58,7 +58,7 @@ var (
 				userData = viper.GetString(internal.SentinelUserDataSetting)
 			}
 
-			internal.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums,
+			postgres.HandleBackupPush(uploader, args[0], permanent, fullBackup, verifyPageChecksums,
 				storeAllCorruptBlocks, tarBallComposerType, deltaBaseSelector, userData)
 		},
 	}
@@ -74,25 +74,12 @@ var (
 
 // create the BackupSelector for delta backup base according to the provided flags
 func createDeltaBaseSelector(cmd *cobra.Command, targetBackupName, targetUserData string) (internal.BackupSelector, error) {
-	switch {
-	case targetUserData != "" && targetBackupName != "":
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetBackupName, postgres.NewGenericMetaFetcher())
+	if err != nil {
 		fmt.Println(cmd.UsageString())
-		return nil, errors.New("Only one delta target should be specified.")
-
-	case targetBackupName != "":
-		tracelog.InfoLogger.Printf("Selecting the backup with name %s as the base for the current delta backup...\n",
-			targetBackupName)
-		return internal.NewBackupNameSelector(targetBackupName)
-
-	case targetUserData != "":
-		tracelog.InfoLogger.Println(
-			"Selecting the backup with specified user data as the base for the current delta backup...")
-		return internal.NewUserDataBackupSelector(targetUserData), nil
-
-	default:
-		tracelog.InfoLogger.Println("Selecting the latest backup as the base for the current delta backup...")
-		return internal.NewLatestBackupSelector(), nil
+		return nil, err
 	}
+	return backupSelector, nil
 }
 
 func init() {

@@ -55,6 +55,12 @@ func (err UnsupportedFileTypeError) Error() string {
 	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
 }
 
+// TarInterpreter behaves differently
+// for different file types.
+type TarInterpreter interface {
+	Interpret(reader io.Reader, header *tar.Header) error
+}
+
 // EmptyWriteIgnorer handles 0 byte write in LZ4 package
 // to stop pipe reader/writer from blocking.
 type EmptyWriteIgnorer struct {
@@ -139,7 +145,7 @@ func DecryptAndDecompressTar(writer io.Writer, readerMaker ReaderMaker, crypter 
 // TODO : unit tests
 // ExtractAll Handles all files passed in. Supports `.lzo`, `.lz4`, `.lzma`, and `.tar`.
 // File type `.nop` is used for testing purposes. Each file is extracted
-// in its own goroutine and ExtractAll will wait for all goroutines to finish.
+// in its own goroutine and ExtractAll will wait for all goroutines to Finish.
 // Returns the first error encountered.
 func ExtractAll(tarInterpreter TarInterpreter, files []ReaderMaker) error {
 	if len(files) == 0 {

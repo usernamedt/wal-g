@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -44,9 +46,9 @@ func NewStoringMockUploader(storage *memory.Storage, deltaDataFolder fsutil.Data
 	)
 }
 
-func NewMockWalUploader(apiMultiErr, apiErr bool) *internal.WalUploader {
+func NewMockWalUploader(apiMultiErr, apiErr bool) *postgres.WalUploader {
 	s3Uploader := MakeDefaultUploader(NewMockS3Uploader(apiMultiErr, apiErr, nil))
-	return internal.NewWalUploader(
+	return postgres.NewWalUploader(
 		&MockCompressor{},
 		s3.NewFolder(*s3Uploader, NewMockS3Client(false, true), "bucket/", "server/", false),
 		nil,
@@ -58,8 +60,8 @@ func CreateMockStorageWalFolder() storage.Folder {
 	return folder.GetSubFolder(utility.WalPath)
 }
 
-func NewMockWalDirUploader(apiMultiErr, apiErr bool) *internal.WalUploader {
-	return internal.NewWalUploader(
+func NewMockWalDirUploader(apiMultiErr, apiErr bool) *postgres.WalUploader {
+	return postgres.NewWalUploader(
 		&MockCompressor{},
 		CreateMockStorageWalFolder(),
 		nil,
@@ -293,4 +295,11 @@ func (ew ErrorWriteCloser) Write(p []byte) (int, error) {
 
 func (ew ErrorWriteCloser) Close() error {
 	return MockCloseError
+}
+
+func Cleanup(t *testing.T, dir string) {
+	err := os.RemoveAll(dir)
+	if err != nil {
+		t.Log("temporary data directory was not deleted ", err)
+	}
 }

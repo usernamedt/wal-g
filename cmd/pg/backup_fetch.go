@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -41,13 +42,13 @@ var backupFetchCmd = &cobra.Command{
 		folder, err := internal.ConfigureFolder()
 		tracelog.ErrorLogger.FatalOnError(err)
 
-		var pgFetcher func(folder storage.Folder, backup internal.Backup)
+		var pgFetcher func(folder storage.Folder, backupName string)
 		reverseDeltaUnpack = reverseDeltaUnpack || viper.GetBool(internal.UseReverseUnpackSetting)
 		skipRedundantTars = skipRedundantTars || viper.GetBool(internal.SkipRedundantTarsSetting)
 		if reverseDeltaUnpack {
-			pgFetcher = internal.GetPgFetcherNew(args[0], fileMask, restoreSpec, skipRedundantTars)
+			pgFetcher = postgres.GetPgFetcherNew(args[0], fileMask, restoreSpec, skipRedundantTars)
 		} else {
-			pgFetcher = internal.GetPgFetcherOld(args[0], fileMask, restoreSpec)
+			pgFetcher = postgres.GetPgFetcherOld(args[0], fileMask, restoreSpec)
 		}
 
 		internal.HandleBackupFetch(folder, targetBackupSelector, pgFetcher)
@@ -61,7 +62,7 @@ func createTargetFetchBackupSelector(cmd *cobra.Command, args []string, targetUs
 		targetName = args[1]
 	}
 
-	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName)
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName, postgres.NewGenericMetaFetcher())
 	if err != nil {
 		fmt.Println(cmd.UsageString())
 		return nil, err

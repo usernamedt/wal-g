@@ -58,8 +58,8 @@ var errIncorrectArguments = errors.New("incorrect arguments")
 // the backup sentinel object uploaded on storage
 type BackupObject interface {
 	storage.Object
-	GetBackupTime() time.Time
 	GetBackupName() string
+	GetBackupTime() time.Time
 
 	// TODO: move increment info into separate struct (in backup.go)
 	IsFullBackup() bool
