@@ -3,7 +3,6 @@ package pg
 import (
 	"github.com/spf13/cobra"
 	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/internal"
 	"github.com/wal-g/wal-g/internal/databases/postgres"
 )
 
@@ -17,7 +16,7 @@ var walPrefetchCmd = &cobra.Command{
 	Args:   cobra.ExactArgs(2),
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		uploader, err := internal.ConfigureWalUploaderWithoutCompressMethod()
+		uploader, err := postgres.ConfigureWalUploaderWithoutCompressMethod()
 		tracelog.ErrorLogger.FatalOnError(err)
 		postgres.HandleWALPrefetch(uploader, args[0], args[1])
 	},

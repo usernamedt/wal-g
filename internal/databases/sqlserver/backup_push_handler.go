@@ -45,11 +45,11 @@ func HandleBackupPush(dbnames []string, updateLatest bool, compression bool) {
 	var backupName string
 	var sentinel *SentinelDto
 	if updateLatest {
-		backup, err := postgres.GetBackupByName(postgres.LatestString, utility.BaseBackupPath, folder)
+		backup, err := internal.GetBackupByName(internal.LatestString, utility.BaseBackupPath, folder)
 		tracelog.ErrorLogger.FatalfOnError("can't find latest backup: %v", err)
 		backupName = backup.Name
 		sentinel = new(SentinelDto)
-		err = backup.FetchSentinel(sentinel)
+		err = backup.FetchSentinel(&sentinel)
 		tracelog.ErrorLogger.FatalOnError(err)
 		sentinel.Databases = uniq(append(sentinel.Databases, dbnames...))
 	} else {

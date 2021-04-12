@@ -1,7 +1,6 @@
 package postgres_test
 
 import (
-	"path"
 	"strings"
 	"testing"
 
@@ -28,11 +27,10 @@ func TestStartCopy_WhenThereAreObjectsToCopy(t *testing.T) {
 	assert.NoError(t, err)
 
 	for _, info := range infos {
-		var filename = path.Join(from.GetPath(), info.SrcObj.GetName())
-		var result, err = to.Exists(filename)
+		var result, err = to.Exists(info.SrcObj.GetName())
 		assert.NoError(t, err)
 		if !result {
-			tracelog.InfoLogger.Println("Filename '" + filename + "' not found")
+			tracelog.InfoLogger.Println("Filename '" + info.SrcObj.GetName() + "' not found")
 		}
 		assert.True(t, result)
 	}

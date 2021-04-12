@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"github.com/wal-g/wal-g/internal/databases/postgres"
+	"os"
 	"os/exec"
 
 	"github.com/wal-g/tracelog"
@@ -23,7 +24,9 @@ func HandleBackupPush(uploader *internal.Uploader, backupCmd *exec.Cmd) {
 	stdout, stderr, err := utility.StartCommandWithStdoutStderr(backupCmd)
 	tracelog.ErrorLogger.FatalfOnError("failed to start backup create command: %v", err)
 
-	fileName, err := uploader.PushStream(limiters.NewDiskLimitReader(stdout))
+	uncompressedSize := int64(0)
+	streamReader := internal.NewWithSizeReader(limiters.NewDiskLimitReader(stdout), &uncompressedSize)
+	fileName, err := uploader.PushStream(streamReader)
 	tracelog.ErrorLogger.FatalfOnError("failed to push backup: %v", err)
 
 	err = backupCmd.Wait()
@@ -34,13 +37,21 @@ func HandleBackupPush(uploader *internal.Uploader, backupCmd *exec.Cmd) {
 
 	binlogEnd := getMySQLCurrentBinlogFile(db)
 	timeStop := utility.TimeNowCrossPlatformLocal()
-	sentinel := StreamSentinelDto{
-		BinLogStart:    binlogStart,
-		BinLogEnd:      binlogEnd,
-		StartLocalTime: timeStart,
-		StopLocalTime:  timeStop,
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = ""
+		tracelog.WarningLogger.Printf("Failed to obtain the OS hostname for the backup sentinel\n")
 	}
-	tracelog.InfoLogger.Printf("Backup sentinel: %s", sentinel)
+	sentinel := StreamSentinelDto{
+		BinLogStart:      binlogStart,
+		BinLogEnd:        binlogEnd,
+		StartLocalTime:   timeStart,
+		StopLocalTime:    timeStop,
+		Hostname:         hostname,
+		CompressedSize:   *uploader.TarSize,
+		UncompressedSize: uncompressedSize,
+	}
+	tracelog.InfoLogger.Printf("Backup sentinel: %s", sentinel.String())
 
 	err = postgres.UploadSentinel(uploader, &sentinel, fileName)
 	tracelog.ErrorLogger.FatalOnError(err)

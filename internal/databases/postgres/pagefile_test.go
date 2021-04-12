@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	pagedFileName               = "../test/testdata/base_paged_file.bin"
+	pagedFileName               = "../../../test/testdata/base_paged_file.bin"
 	pagedFileSizeInBytes        = 65536
 	pagedFileBlockCount         = pagedFileSizeInBytes / postgres.DatabasePageSize
 	sampleLSN            uint64 = 0xc6bd4600

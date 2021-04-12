@@ -82,7 +82,7 @@ func (backup *Backup) unwrapNew(
 	}
 
 	// Check name for backwards compatibility. Will check for `pg_control` if WALG version of backup.
-	needPgControl := IsPgControlRequired(backup, sentinelDto)
+	needPgControl := IsPgControlRequired(*backup, sentinelDto)
 
 	if pgControlKey == "" && needPgControl {
 		return nil, newPgControlNotFoundError()

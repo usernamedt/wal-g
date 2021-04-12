@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	WalgTestDataFolderPath = "../test/testdata"
+	WalgTestDataFolderPath = "../../../test/testdata"
 	WalFilename            = "00000001000000000000007C"
 	LastWalFilename        = "00000001000000000000007F"
 	DeltaFilename          = "000000010000000000000070_delta"

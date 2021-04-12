@@ -28,33 +28,22 @@ var UtilityFilePaths = map[string]bool{
 var patternPgBackupName = fmt.Sprintf("base_%[1]s(_D_%[1]s)?", PatternTimelineAndLogSegNo)
 var regexpPgBackupName = regexp.MustCompile(patternPgBackupName)
 
-type NoBackupsFoundError struct {
-	error
-}
-
-func NewNoBackupsFoundError() NoBackupsFoundError {
-	return NoBackupsFoundError{errors.New("No backups found")}
-}
-
-func (err NoBackupsFoundError) Error() string {
-	return fmt.Sprintf(tracelog.GetErrorFormatter(), err.error)
-}
-
 // Backup contains information about a valid Postgres backup
 // generated and uploaded by WAL-G.
 type Backup struct {
-	Name   string
-	Folder storage.Folder
-
-	metaProvider internal.BackupMetaFetcher
+	internal.Backup
 	SentinelDto      *BackupSentinelDto // used for storage query caching
 }
 
-func NewBackup(baseBackupFolder storage.Folder,  name string) *Backup {
-	return &Backup{
-		Name:         name,
-		Folder:       baseBackupFolder,
-		metaProvider: *internal.NewBackupMetaFetcher(baseBackupFolder, name),
+func ToPgBackup(source internal.Backup) (output Backup) {
+	return Backup{
+		Backup: source,
+	}
+}
+
+func NewBackup(baseBackupFolder storage.Folder, name string) Backup {
+	return Backup{
+		Backup: internal.NewBackup(baseBackupFolder, name),
 	}
 }
 
@@ -80,7 +69,7 @@ func (backup *Backup) GetSentinel() (BackupSentinelDto, error) {
 		return *backup.SentinelDto, nil
 	}
 	sentinelDto := BackupSentinelDto{}
-	err := backup.metaProvider.FetchSentinel(sentinelDto)
+	err := backup.FetchSentinel(&sentinelDto)
 	if err != nil {
 		return sentinelDto, err
 	}
@@ -91,7 +80,7 @@ func (backup *Backup) GetSentinel() (BackupSentinelDto, error) {
 
 func (backup *Backup) FetchMeta() (ExtendedMetadataDto, error) {
 	extendedMetadataDto := ExtendedMetadataDto{}
-	err := backup.metaProvider.FetchMetadata(&extendedMetadataDto)
+	err := backup.FetchMetadata(&extendedMetadataDto)
 	if err != nil {
 		return ExtendedMetadataDto{}, errors.Wrap(err, "failed to unmarshal metadata")
 	}
@@ -181,7 +170,7 @@ func (backup *Backup) unwrapOld(
 	}
 
 	// Check name for backwards compatibility. Will check for `pg_control` if WALG version of backup.
-	needPgControl := IsPgControlRequired(backup, sentinelDto)
+	needPgControl := IsPgControlRequired(*backup, sentinelDto)
 
 	if pgControlKey == "" && needPgControl {
 		return newPgControlNotFoundError()
@@ -204,7 +193,7 @@ func (backup *Backup) unwrapOld(
 	return nil
 }
 
-func IsPgControlRequired(backup *Backup, sentinelDto BackupSentinelDto) bool {
+func IsPgControlRequired(backup Backup, sentinelDto BackupSentinelDto) bool {
 	re := regexp.MustCompile(`^([^_]+._{1}[^_]+._{1})`)
 	walgBasebackupName := re.FindString(backup.Name) == ""
 	needPgControl := walgBasebackupName || sentinelDto.IsIncremental()
@@ -295,7 +284,7 @@ func shouldUnwrapTar(tarName string, sentinelDto BackupSentinelDto, filesToUnwra
 	return false
 }
 
-func GetLastWalFilename(backup *Backup) (string, error) {
+func GetLastWalFilename(backup Backup) (string, error) {
 	meta, err := backup.FetchMeta()
 	if err != nil {
 		tracelog.InfoLogger.Print("No meta found.")

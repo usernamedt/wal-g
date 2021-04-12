@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"github.com/wal-g/wal-g/internal/databases/postgres"
 	"strconv"
 	"strings"
 	"testing"
@@ -267,7 +268,7 @@ func TestDeleteBeforeTargetWithPermanentBackups(t *testing.T) {
 	// attempt delete
 	target := storage.NewLocalObject("", utility.TimeNowCrossPlatformLocal().Add(time.Duration(1*int(time.Minute))), 0)
 
-	permanentBackups, permanentWals := internal.GetPermanentObjects(folder)
+	permanentBackups, permanentWals := postgres.GetPermanentBackupsAndWals(folder)
 	isPermanent := makeTestPermanentFunc(permanentBackups, permanentWals)
 	deleteHandler := newTestDeleteHandler(folder, lessByTime, internal.IsPermanentFunc(isPermanent))
 
@@ -374,6 +375,6 @@ func getBackupObjects(folder storage.Folder) ([]storage.Object, error) {
 
 func makeTestPermanentFunc(permanentBackups, permanentWals map[string]bool) func(object storage.Object) bool {
 	return func(object storage.Object) bool {
-		return internal.IsPermanent(object.GetName(), permanentBackups, permanentWals)
+		return postgres.IsPermanent(object.GetName(), permanentBackups, permanentWals)
 	}
 }

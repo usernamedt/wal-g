@@ -25,9 +25,9 @@ func HandleCopy(fromConfigFile string, toConfigFile string, backupName string, w
 	tracelog.InfoLogger.Println("Success copy.")
 }
 
-func BackupCopyingInfo(backup *Backup, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
+func BackupCopyingInfo(backup Backup, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
 	tracelog.InfoLogger.Print("Collecting backup files...")
-	var backupPrefix = path.Join(utility.BaseBackupPath, backup.BackupName)
+	var backupPrefix = path.Join(utility.BaseBackupPath, backup.Name)
 
 	var objects, err = storage.ListFolderRecursively(from)
 	if err != nil {
@@ -44,17 +44,18 @@ func getCopyingInfos(backupName string, from storage.Folder, to storage.Folder, 
 		return WildcardInfo(from, to)
 	}
 	tracelog.InfoLogger.Printf("Handle backupname '%s'.", backupName)
-	backup, err := ToPgBackupWithError(internal.GetBackupMetaFetcherByName(backupName, utility.BaseBackupPath, from))
+	backup, err := internal.GetBackupByName(backupName, utility.BaseBackupPath, from)
 	if err != nil {
 		return nil, err
 	}
 
-	infos, err := BackupCopyingInfo(backup, from, to)
+	pgBackup := ToPgBackup(backup)
+	infos, err := BackupCopyingInfo(pgBackup, from, to)
 	if err != nil {
 		return nil, err
 	}
 	if !withoutHistory {
-		var history, err = HistoryCopyingInfo(backup, from, to)
+		var history, err = HistoryCopyingInfo(pgBackup, from, to)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +64,7 @@ func getCopyingInfos(backupName string, from storage.Folder, to storage.Folder, 
 	return infos, nil
 }
 
-func HistoryCopyingInfo(backup *Backup, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
+func HistoryCopyingInfo(backup Backup, from storage.Folder, to storage.Folder) ([]copy.InfoProvider, error) {
 	tracelog.DebugLogger.Print("Collecting history files... ")
 
 	var fromWalFolder = from.GetSubFolder(utility.WalPath)

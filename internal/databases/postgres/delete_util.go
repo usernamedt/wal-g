@@ -17,7 +17,7 @@ func GetPermanentBackupsAndWals(folder storage.Folder) (map[string]bool, map[str
 	permanentBackups := map[string]bool{}
 	permanentWals := map[string]bool{}
 	for _, backupTime := range backupTimes {
-		backup := NewBackup(folder, backupTime.BackupName)
+		backup := NewBackup(folder.GetSubFolder(utility.BaseBackupPath), backupTime.BackupName)
 		meta, err := backup.FetchMeta()
 		if err != nil {
 			tracelog.ErrorLogger.Printf("failed to fetch backup meta for backup %s with error %s, ignoring...",

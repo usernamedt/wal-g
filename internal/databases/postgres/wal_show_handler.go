@@ -170,7 +170,7 @@ func addBackupsInfo(timelineInfos []*TimelineInfo, rootFolder storage.Folder) ([
 	if err != nil {
 		return nil, err
 	}
-	backupDetails, err := internal.GetBackupsDetails(rootFolder, backups)
+	backupDetails, err := GetBackupsDetails(rootFolder, backups)
 	if err != nil {
 		return nil, err
 	}

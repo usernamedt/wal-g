@@ -84,7 +84,7 @@ func NewStorageDownloader(opts StorageSettings) (*StorageDownloader, error) {
 
 // BackupMeta downloads sentinel contents.
 func (sd *StorageDownloader) BackupMeta(name string) (models.Backup, error) {
-	backup := internal.NewBackupMetaFetcher(sd.backupsFolder, name)
+	backup := internal.NewBackup(sd.backupsFolder, name)
 	var sentinel models.Backup
 	err := backup.FetchSentinel(&sentinel)
 	if err != nil {

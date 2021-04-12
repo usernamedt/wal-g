@@ -169,7 +169,7 @@ func TestGetBackupMetadataToUpload_unmarkOneBackupWithoutIncrementBackups(t *tes
 	toMark := "base_000000010000000000000004_D_000000010000000000000002"
 	expectBackupsToMarkLen := 1
 	expectBackupsToMark := map[int]string{
-		0: "base_000000010000000000000004_D_000000010000000000000002" + "/" + utility.MetadataFileName,
+		0: "base_000000010000000000000004_D_000000010000000000000002",
 	}
 
 	testGetBackupMetadataToUpload(backups, false, false, toMark, expectBackupsToMarkLen, expectBackupsToMark, t)
@@ -259,14 +259,14 @@ func testGetBackupMetadataToUpload(
 		err = baseBackupFolder.PutObject(backupName+"/"+utility.MetadataFileName, bytes.NewReader(metaBytes))
 		assert.NoError(t, err)
 	}
-	markHandler := internal.NewBackupMarkHandler(postgres.NewGenericBackupProvider(), folder)
+	markHandler := internal.NewBackupMarkHandler(postgres.NewGenericMetaInteractor(), folder)
 	backupsToMark, err := markHandler.GetBackupsToMark(toMark, toPermanent)
 
 	if !isErrorExpect {
 		assert.NoError(t, err)
 		assert.Equal(t, len(backupsToMark), expectBackupsToMarkLen)
 		for idx, name := range expectBackupsToMark {
-			assert.Equal(t, backupsToMark[idx].Name(), name)
+			assert.Equal(t, backupsToMark[idx], name)
 		}
 	} else {
 		assert.Error(t, err)

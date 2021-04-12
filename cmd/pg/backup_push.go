@@ -36,7 +36,7 @@ var (
 		Short: backupPushShortDescription, // TODO : improve description
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader, err := internal.ConfigureWalUploader()
+			uploader, err := postgres.ConfigureWalUploader()
 			tracelog.ErrorLogger.FatalOnError(err)
 			verifyPageChecksums = verifyPageChecksums || viper.GetBool(internal.VerifyPageChecksumsSetting)
 			storeAllCorruptBlocks = storeAllCorruptBlocks || viper.GetBool(internal.StoreAllCorruptBlocksSetting)
@@ -74,7 +74,7 @@ var (
 
 // create the BackupSelector for delta backup base according to the provided flags
 func createDeltaBaseSelector(cmd *cobra.Command, targetBackupName, targetUserData string) (internal.BackupSelector, error) {
-	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetBackupName, postgres.NewGenericBackupProvider())
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetBackupName, postgres.NewGenericMetaFetcher())
 	if err != nil {
 		fmt.Println(cmd.UsageString())
 		return nil, err

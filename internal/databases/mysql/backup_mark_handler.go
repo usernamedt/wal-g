@@ -12,5 +12,5 @@ func MarkBackup(uploader *internal.Uploader, backupName string, toPermanent bool
 
 	uploader.UploadingFolder = uploader.UploadingFolder.GetSubFolder(utility.BaseBackupPath)
 
-	return internal.HandleBackupMark()
+	internal.HandleBackupMark(uploader, backupName, toPermanent, NewGenericMetaInteractor())
 }

@@ -8,16 +8,16 @@ import (
 )
 
 type BackupMarkHandler struct {
-	backupProvider GenericBackupProvider
+	metaInteractor    GenericMetaInteractor
 	storageRootFolder storage.Folder
-	baseBackupFolder storage.Folder
+	baseBackupFolder  storage.Folder
 }
 
-func NewBackupMarkHandler(backupProvider GenericBackupProvider, storageRootFolder storage.Folder) BackupMarkHandler {
+func NewBackupMarkHandler(metaInteractor GenericMetaInteractor, storageRootFolder storage.Folder) BackupMarkHandler {
 	return BackupMarkHandler{
-		backupProvider: backupProvider,
+		metaInteractor:    metaInteractor,
 		storageRootFolder: storageRootFolder,
-		baseBackupFolder: storageRootFolder.GetSubFolder(utility.BaseBackupPath),
+		baseBackupFolder:  storageRootFolder.GetSubFolder(utility.BaseBackupPath),
 	}
 }
 
@@ -28,9 +28,8 @@ func (h *BackupMarkHandler) MarkBackup(backupName string, toPermanent bool) {
 
 	tracelog.ErrorLogger.FatalfOnError("Failed to get previous backups: %v", err)
 	tracelog.InfoLogger.Printf("Retrieved backups to be marked, marking: %v", backupsToMark)
-
-	for _, backup := range backupsToMark {
-		err = backup.SetIsPermanent(toPermanent)
+	for _, backupName := range backupsToMark {
+		err = h.metaInteractor.SetIsPermanent(backupName, h.baseBackupFolder, toPermanent)
 		tracelog.ErrorLogger.FatalfOnError("Failed to mark backups: %v", err)
 	}
 }
@@ -42,16 +41,12 @@ func (h *BackupMarkHandler) MarkBackup(backupName string, toPermanent bool) {
 //
 // For example, when marking backups from impermanent to permanent, we retrieve
 // all currently impermanent backups and return them as a slice
-func (h *BackupMarkHandler) GetBackupsToMark(backupName string, toPermanent bool) ([]GenericBackup, error) {
-	backup, err := h.backupProvider.GetGenericBackup(backupName, h.baseBackupFolder)
+func (h *BackupMarkHandler) GetBackupsToMark(backupName string, toPermanent bool) ([]string, error) {
+	meta, err := h.metaInteractor.Fetch(backupName, h.baseBackupFolder)
 	if err != nil {
 		return nil, err
 	}
 
-	meta, err := backup.GetMetadata()
-	if err != nil {
-		return nil, err
-	}
 	//raise error when backup already has that type
 	if toPermanent == meta.IsPermanent {
 		permanentType := "permanent"
@@ -68,31 +63,25 @@ func (h *BackupMarkHandler) GetBackupsToMark(backupName string, toPermanent bool
 	}
 }
 
-func (h *BackupMarkHandler) getBackupsToMarkPermanent(backupName string) ([]GenericBackup, error) {
-	var backupsToMark []GenericBackup
-	backup, err := h.backupProvider.GetGenericBackup(backupName, h.baseBackupFolder)
-	if err != nil {
-		return nil, err
-	}
-
-	meta, err := backup.GetMetadata()
+func (h *BackupMarkHandler) getBackupsToMarkPermanent(backupName string) ([]string, error) {
+	var backupsToMark []string
+	meta, err := h.metaInteractor.Fetch(backupName, h.baseBackupFolder)
 	if err != nil {
 		return nil, err
 	}
 
 	// only return backups that we want to update
 	if !meta.IsPermanent {
-		backupsToMark = append(backupsToMark, backup)
+		backupsToMark = append(backupsToMark, meta.BackupName)
 	}
 
-	// return when no longer incremental
-	if !meta.IsIncremental {
-		return backupsToMark, nil
-	}
-
-	incrementDetails, err := meta.FetchIncrementDetails()
+	isIncremental, incrementDetails, err := meta.FetchIncrementDetails()
 	if err != nil {
 		return nil, err
+	}
+	// return when no longer incremental
+	if !isIncremental {
+		return backupsToMark, nil
 	}
 
 	// mark previous backup
@@ -105,13 +94,13 @@ func (h *BackupMarkHandler) getBackupsToMarkPermanent(backupName string) ([]Gene
 	return previousImpermanentBackups, nil
 }
 
-func (h *BackupMarkHandler) getBackupsToMarkImpermanent(backupName string) ([]GenericBackup, error) {
-	backup, err := h.backupProvider.GetGenericBackup(backupName, h.baseBackupFolder)
+func (h *BackupMarkHandler) getBackupsToMarkImpermanent(backupName string) ([]string, error) {
+	meta, err := h.metaInteractor.Fetch(backupName, h.baseBackupFolder)
 	if err != nil {
 		return nil, err
 	}
 
-	permanentBackups := GetPermanentBackups(h.storageRootFolder, h.backupProvider)
+	permanentBackups := GetPermanentBackups(h.storageRootFolder, h.metaInteractor)
 	//  del current backup from
 	delete(permanentBackups, getBackupNumber(backupName))
 
@@ -124,7 +113,7 @@ func (h *BackupMarkHandler) getBackupsToMarkImpermanent(backupName string) ([]Ge
 		return nil, newBackupHasPermanentBackupInFutureError(backupName)
 	}
 
-	return []GenericBackup{backup}, nil
+	return []string{meta.BackupName}, nil
 }
 
 func getBackupNumber(backupName string) string {
@@ -171,22 +160,17 @@ func (h *BackupMarkHandler) getGraphFromBaseToIncrement() (map[string][]string, 
 }
 
 func (h *BackupMarkHandler) getMetadataFromBackup(backupName string) (incrementFrom string, isIncrement bool, err error) {
-	backup, err := h.backupProvider.GetGenericBackup(backupName, h.baseBackupFolder)
-	if err != nil {
-		return "", false, err
-	}
-	meta, err := backup.GetMetadata()
+	meta, err := h.metaInteractor.Fetch(backupName, h.baseBackupFolder)
 	if err != nil {
 		return "", false, err
 	}
 
-	if !meta.IsIncremental {
+	isIncremental, incrementDetails, err := meta.FetchIncrementDetails()
+	if err != nil {
+		return "", false, err
+	}
+	if !isIncremental {
 		return "", false, nil
-	}
-
-	incrementDetails, err := meta.FetchIncrementDetails()
-	if err != nil {
-		return "", false, err
 	}
 
 	return incrementDetails.IncrementFrom, true, nil
@@ -209,7 +193,7 @@ func newBackupHasPermanentBackupInFutureError(backupName string) BackupHasPerman
 	return BackupHasPermanentBackupInFutureError{errors.Errorf("Can't mark backup '%s' as impermanent. There is permanent increment backup.", backupName)}
 }
 
-func GetPermanentBackups(folder storage.Folder, backupProvider GenericBackupProvider) map[string]bool {
+func GetPermanentBackups(folder storage.Folder, metaFetcher GenericMetaFetcher) map[string]bool {
 	tracelog.InfoLogger.Println("retrieving permanent objects")
 	backupTimes, err := GetBackups(folder)
 	if err != nil {
@@ -218,12 +202,7 @@ func GetPermanentBackups(folder storage.Folder, backupProvider GenericBackupProv
 
 	permanentBackups := map[string]bool{}
 	for _, backupTime := range backupTimes {
-		backup, err := backupProvider.GetGenericBackup(backupTime.BackupName, folder.GetSubFolder(utility.BaseBackupPath))
-		if err != nil {
-			tracelog.ErrorLogger.Printf("failed to get backup by name with error %s, ignoring...", err.Error())
-			continue
-		}
-		meta, err := backup.GetMetadata()
+		meta, err := metaFetcher.Fetch(backupTime.BackupName, folder.GetSubFolder(utility.BaseBackupPath))
 		if err != nil {
 			tracelog.ErrorLogger.Printf("failed to fetch backup meta for backup %s with error %s, ignoring...",
 				backupTime.BackupName, err.Error())

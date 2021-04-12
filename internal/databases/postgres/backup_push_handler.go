@@ -142,7 +142,8 @@ func createAndPushBackup(bc *BackupConfig) {
 	// If pushing permanent delta backup, mark all previous backups permanent
 	// Do this before uploading current meta to ensure that backups are marked in increasing order
 	if bc.isPermanent && currentBackupSentinelDto.IsIncremental() {
-		internal.MarkBackup(bc.uploader.Uploader, folder, bc.previousBackupName, true)
+		markBackupHandler := internal.NewBackupMarkHandler(NewGenericMetaInteractor(), folder)
+		markBackupHandler.MarkBackup(bc.previousBackupName, true)
 	}
 
 	err = uploadMetadata(bc.uploader.Uploader, currentBackupSentinelDto, backupName, meta)

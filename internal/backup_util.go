@@ -23,7 +23,7 @@ func (err NoBackupsFoundError) Error() string {
 }
 
 // TODO : unit tests
-func getLatestBackupName(folder storage.Folder) (string, error) {
+func GetLatestBackupName(folder storage.Folder) (string, error) {
 	sortTimes, err := GetBackups(folder)
 	if err != nil {
 		return "", err
@@ -121,4 +121,19 @@ func getGarbageFromPrefix(folders []storage.Folder, nonGarbage []BackupTime) []s
 
 func SentinelNameFromBackup(backupName string) string {
 	return backupName + utility.SentinelSuffix
+}
+
+// UnwrapLatestModifier checks if LATEST is provided instead of backupName
+// if so, replaces it with the name of the latest backup
+func UnwrapLatestModifier(backupName string, folder storage.Folder) (string, error) {
+	if backupName != LatestString {
+		return backupName, nil
+	}
+
+	latest, err := GetLatestBackupName(folder)
+	if err != nil {
+		return "", err
+	}
+	tracelog.InfoLogger.Printf("LATEST backup is: '%s'\n", latest)
+	return latest, nil
 }

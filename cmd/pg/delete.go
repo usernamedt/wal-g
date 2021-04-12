@@ -284,7 +284,7 @@ func getBackupStartTimeMap(folder storage.Folder, backups []storage.Object) (map
 	startTimeByBackupName := make(map[string]time.Time, len(backups))
 
 	for _, backupTime := range backupTimes {
-		backupDetails, err := internal.GetBackupDetails(folder, backupTime)
+		backupDetails, err := postgres.GetBackupDetails(folder, backupTime)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Failed to get metadata of backup %s",
 				backupTime.BackupName)
@@ -340,7 +340,7 @@ func createTargetDeleteBackupSelector(cmd *cobra.Command, args []string, targetU
 		targetName = args[0]
 	}
 
-	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName, postgres.NewGenericBackupProvider())
+	backupSelector, err := internal.NewTargetBackupSelector(targetUserData, targetName, postgres.NewGenericMetaFetcher())
 	if err != nil {
 		fmt.Println(cmd.UsageString())
 		return nil, err
