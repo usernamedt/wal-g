@@ -42,7 +42,7 @@ jobs:
 
       - name: Fix LZO (ubuntu-18.04)
         if: matrix.os == 'ubuntu-18.04'
-        run: export CGO_LDFLAGS='-no-pie'
+        run: echo "CGO_LDFLAGS=-no-pie" >> $GITHUB_ENV
 
       - name: Build WAL-G
         run: make ${{ matrix.db }}_build
