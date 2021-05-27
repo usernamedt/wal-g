@@ -40,6 +40,10 @@ jobs:
       - name: Make deps
         run: make deps
 
+      - name: Fix LZO (ubuntu-18.04)
+        if: matrix.os == 'ubuntu-18.04'
+        run: export CGO_LDFLAGS='-no-pie'
+
       - name: Build WAL-G
         run: make ${{ matrix.db }}_build
 
