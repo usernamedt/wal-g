@@ -37,6 +37,9 @@ jobs:
            dep ensure
           fi
 
+      - name: Make deps
+        run: make deps
+
       - name: Build WAL-G
         run: make ${{ matrix.db }}_build
 
