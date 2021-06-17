@@ -14,7 +14,6 @@ func HandleBackupPush(uploader *internal.Uploader, backupCmd *exec.Cmd, isPerman
 	uploader.UploadingFolder = uploader.UploadingFolder.GetSubFolder(utility.BaseBackupPath)
 
 	db, err := getMySQLConnection()
-	tracelog.ErrorLogger.FatalOnError(err)
 	defer utility.LoggedClose(db, "")
 
 	binlogStart := getMySQLCurrentBinlogFile(db)
