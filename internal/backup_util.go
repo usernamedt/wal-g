@@ -51,7 +51,7 @@ func GetLatestBackupName(folder storage.Folder) (string, error) {
 }
 
 func GetBackupSentinelObjects(folder storage.Folder) ([]storage.Object, error) {
-	objects, _, err := folder.GetSubFolder(utility.BaseBackupPath).ListFolder()
+	objects, _, err := folder.ListFolder()
 	if err != nil {
 		return nil, err
 	}

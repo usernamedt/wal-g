@@ -138,7 +138,7 @@ func init() {
 
 func newPostgresDeleteHandler(folder storage.Folder, permanentBackups, permanentWals map[string]bool,
 ) (*internal.DeleteHandler, error) {
-	backups, err := internal.GetBackupSentinelObjects(folder)
+	backups, err := internal.GetBackupSentinelObjects(folder.GetSubFolder(utility.BaseBackupPath))
 	if err != nil {
 		return nil, err
 	}

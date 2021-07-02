@@ -169,7 +169,7 @@ func (h *DeleteHandler) HandleDeleteRetainAfter(args []string, confirmed bool) {
 }
 
 func (h *DeleteHandler) HandleDeleteTarget(targetSelector BackupSelector, confirmed, findFull bool) {
-	targetName, err := targetSelector.Select(h.Folder)
+	targetName, err := targetSelector.Select(h.Folder.GetSubFolder(utility.BaseBackupPath))
 	tracelog.ErrorLogger.FatalOnError(err)
 
 	var target BackupObject

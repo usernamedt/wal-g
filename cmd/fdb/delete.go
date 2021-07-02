@@ -94,7 +94,7 @@ func init() {
 }
 
 func newFdbDeleteHandler(folder storage.Folder) (*internal.DeleteHandler, error) {
-	backups, err := internal.GetBackupSentinelObjects(folder)
+	backups, err := internal.GetBackupSentinelObjects(folder.GetSubFolder(utility.BaseBackupPath))
 	if err != nil {
 		return nil, err
 	}

@@ -479,8 +479,8 @@ func (bh *BackupHandler) configureDeltaBackup() (err error) {
 	}
 
 	folder := bh.workers.uploader.UploadingFolder
-	baseBackupFolder := folder.GetSubFolder(utility.BaseBackupPath)
-	previousBackupName, err := bh.arguments.deltaBaseSelector.Select(folder)
+	baseBackupFolder := folder.GetSubFolder(bh.arguments.backupsFolder)
+	previousBackupName, err := bh.arguments.deltaBaseSelector.Select(baseBackupFolder)
 	if err != nil {
 		if _, ok := err.(internal.NoBackupsFoundError); ok {
 			tracelog.InfoLogger.Println("Couldn't find previous backup. Doing full backup.")

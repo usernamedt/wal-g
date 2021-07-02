@@ -144,7 +144,7 @@ func NewMySQLDeleteHandler() (*DeleteHandler, error) {
 	folder, err := internal.ConfigureFolder()
 	tracelog.ErrorLogger.FatalOnError(err)
 
-	backups, err := internal.GetBackupSentinelObjects(folder)
+	backups, err := internal.GetBackupSentinelObjects(folder.GetSubFolder(utility.BaseBackupPath))
 	if err != nil {
 		return nil, err
 	}

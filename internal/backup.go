@@ -140,7 +140,10 @@ func (backup *Backup) AssureExists() error {
 }
 
 func GetBackupByName(backupName, subfolder string, folder storage.Folder) (Backup, error) {
-	baseBackupFolder := folder.GetSubFolder(subfolder)
+	baseBackupFolder := folder
+	if subfolder != "" {
+		baseBackupFolder = folder.GetSubFolder(subfolder)
+	}
 
 	var backup Backup
 	if backupName == LatestString {

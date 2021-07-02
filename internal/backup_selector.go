@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/utility"
 )
 
 const LatestString = "LATEST"
@@ -27,7 +26,7 @@ func NewLatestBackupSelector() LatestBackupSelector {
 }
 
 func (s LatestBackupSelector) Select(folder storage.Folder) (string, error) {
-	return GetLatestBackupName(folder.GetSubFolder(utility.BaseBackupPath))
+	return GetLatestBackupName(folder)
 }
 
 // Select backup which has the provided user data
@@ -92,7 +91,7 @@ func searchInMetadata(
 	foundMeta := make([]GenericMetadata, 0)
 
 	for _, backupTime := range backupTimes {
-		meta, err := metaFetcher.Fetch(backupTime.BackupName, folder.GetSubFolder(utility.BaseBackupPath))
+		meta, err := metaFetcher.Fetch(backupTime.BackupName, folder)
 		if err != nil {
 			tracelog.WarningLogger.Printf("Failed to get metadata of backup %s, error: %s\n",
 				backupTime.BackupName, err.Error())
@@ -113,7 +112,7 @@ func NewBackupNameSelector(backupName string) (BackupNameSelector, error) {
 }
 
 func (s BackupNameSelector) Select(folder storage.Folder) (string, error) {
-	_, err := GetBackupByName(s.backupName, utility.BaseBackupPath, folder)
+	_, err := GetBackupByName(s.backupName, "", folder)
 	if err != nil {
 		return "", err
 	}

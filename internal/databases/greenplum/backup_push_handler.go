@@ -35,14 +35,18 @@ func NewSegmentUserData(contentID int) SegmentUserData {
 	return SegmentUserData{ContentID: contentID}
 }
 
-// QuotedString will do json.Marshal-ing followed by quoting in order to escape special control characters
-// in the resulting JSON so it can be transferred as the cmdline argument to a segment
-func (d SegmentUserData) QuotedString() string {
-	unescapedJson, err := json.Marshal(d)
+func (d SegmentUserData) String() string {
+	b, err := json.Marshal(d)
 	if err != nil {
 		panic(err)
 	}
-	return strconv.Quote(string(unescapedJson))
+	return string(b)
+}
+
+// QuotedString will do json.Marshal-ing followed by quoting in order to escape special control characters
+// in the resulting JSON so it can be transferred as the cmdline argument to a segment
+func (d SegmentUserData) QuotedString() string {
+	return strconv.Quote(d.String())
 }
 
 // SegmentFwdArg describes the specific WAL-G
@@ -94,14 +98,12 @@ func (bh *BackupHandler) buildCommand(contentID int) string {
 
 // HandleBackupPush handles the backup being read from filesystem and being pushed to the repository
 func (bh *BackupHandler) HandleBackupPush() {
-	folder := bh.workers.Uploader.UploadingFolder
-	bh.workers.Uploader.UploadingFolder = folder.GetSubFolder(utility.BaseBackupPath)
 	bh.curBackupInfo.backupName = "backup" + time.Now().Format(utility.BackupTimeFormat)
 
 	tracelog.InfoLogger.Println("Running wal-g on segments")
 	gplog.InitializeLogging("wal-g", "")
 	remoteOutput := bh.globalCluster.GenerateAndExecuteCommand("Running wal-g",
-		cluster.ON_SEGMENTS|cluster.INCLUDE_MASTER,
+		cluster.ON_SEGMENTS,
 		func(contentID int) string {
 			return bh.buildCommand(contentID)
 		})
@@ -112,6 +114,8 @@ func (bh *BackupHandler) HandleBackupPush() {
 	for _, command := range remoteOutput.Commands {
 		tracelog.DebugLogger.Printf("WAL-G output (segment %d):\n%s\n", command.Content, command.Stderr)
 	}
+
+	bh.backupCoordinator()
 
 	err := bh.connect()
 	tracelog.ErrorLogger.FatalOnError(err)
@@ -128,6 +132,19 @@ func (bh *BackupHandler) HandleBackupPush() {
 		tracelog.ErrorLogger.Printf("Failed to upload sentinel file for backup: %s", bh.curBackupInfo.backupName)
 		tracelog.ErrorLogger.FatalError(err)
 	}
+}
+
+func (bh *BackupHandler) backupCoordinator() {
+	coordinator := bh.globalCluster.Segments[0]
+	backupPath := fmt.Sprintf("%s/%s", "seg-1", utility.BaseBackupPath)
+
+	arguments := postgres.NewBackupArguments(coordinator.DataDir, backupPath,
+		bh.arguments.isPermanent, false,false, false,
+		postgres.RegularComposer, internal.NewLatestBackupSelector(), NewSegmentUserData(-1).String())
+
+	backupHandler, err := postgres.NewBackupHandler(arguments)
+	tracelog.ErrorLogger.FatalOnError(err)
+	backupHandler.HandleBackupPush()
 }
 
 func (bh *BackupHandler) extractPgBackupNames() (err error) {
@@ -160,7 +177,7 @@ func (bh *BackupHandler) connect() (err error) {
 
 func (bh *BackupHandler) createRestorePoint(restorePointName string) (err error) {
 	tracelog.InfoLogger.Printf("Creating restore point with name %s", restorePointName)
-	queryRunner, err := NewPgQueryRunner(bh.workers.Conn)
+	queryRunner, err := NewGpQueryRunner(bh.workers.Conn)
 	if err != nil {
 		return
 	}
@@ -180,7 +197,7 @@ func getGpCluster() (globalCluster *cluster.Cluster, err error) {
 		return globalCluster, err
 	}
 
-	queryRunner, err := NewPgQueryRunner(tmpConn)
+	queryRunner, err := NewGpQueryRunner(tmpConn)
 	if err != nil {
 		return globalCluster, err
 	}

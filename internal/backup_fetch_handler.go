@@ -74,7 +74,7 @@ func StreamBackupToCommandStdin(cmd *exec.Cmd, backup Backup) error {
 func HandleBackupFetch(folder storage.Folder,
 	targetBackupSelector BackupSelector,
 	fetcher func(folder storage.Folder, backup Backup)) {
-	backupName, err := targetBackupSelector.Select(folder)
+	backupName, err := targetBackupSelector.Select(folder.GetSubFolder(utility.BaseBackupPath))
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.DebugLogger.Printf("HandleBackupFetch(%s, folder,)\n", backupName)
 	backup, err := GetBackupByName(backupName, utility.BaseBackupPath, folder)
