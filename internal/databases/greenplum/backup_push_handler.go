@@ -139,7 +139,7 @@ func (bh *BackupHandler) backupCoordinator() {
 	backupPath := fmt.Sprintf("%s/%s", "seg-1", utility.BaseBackupPath)
 
 	arguments := postgres.NewBackupArguments(coordinator.DataDir, backupPath,
-		bh.arguments.isPermanent, false,false, false,
+		bh.arguments.isPermanent, false, false, false,
 		postgres.RegularComposer, internal.NewLatestBackupSelector(), NewSegmentUserData(-1).String())
 
 	backupHandler, err := postgres.NewBackupHandler(arguments)
