@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"github.com/wal-g/wal-g/utility"
 
 	"github.com/wal-g/wal-g/internal/databases/postgres"
 
@@ -14,13 +15,20 @@ import (
 
 const (
 	backupFetchShortDescription = "Fetches a backup from storage"
-	maskFlagDescription         = `Fetches only files which path relative to destination_directory
+
+	MaskFlag = "mask"
+	RestoreSpecFlag = "restore-spec"
+	ReverseDeltaUnpackFlag = "reverse-unpack"
+	SkipRedundantTarsFlag = "skip-redundant-tars"
+	TargetUserDataFlag = "target-user-data"
+
+	MaskFlagDescription         = `Fetches only files which path relative to destination_directory
 matches given shell file pattern.
 For information about pattern syntax view: https://golang.org/pkg/path/filepath/#Match`
-	restoreSpecDescription        = "Path to file containing tablespace restore specification"
-	reverseDeltaUnpackDescription = "Unpack delta backups in reverse order (beta feature)"
-	skipRedundantTarsDescription  = "Skip tars with no useful data (requires reverse delta unpack)"
-	targetUserDataDescription     = "Fetch storage backup which has the specified user data"
+	RestoreSpecDescription        = "Path to file containing tablespace restore specification"
+	ReverseDeltaUnpackDescription = "Unpack delta backups in reverse order (beta feature)"
+	SkipRedundantTarsDescription  = "Skip tars with no useful data (requires reverse delta unpack)"
+	TargetUserDataDescription     = "Fetch storage backup which has the specified user data"
 )
 
 var fileMask string
@@ -37,7 +45,7 @@ var backupFetchCmd = &cobra.Command{
 		if fetchTargetUserData == "" {
 			fetchTargetUserData = viper.GetString(internal.FetchTargetUserDataSetting)
 		}
-		targetBackupSelector, err := createTargetFetchBackupSelector(cmd, args, fetchTargetUserData)
+		targetBackupSelector, err := CreateTargetFetchBackupSelector(cmd, args, fetchTargetUserData)
 		tracelog.ErrorLogger.FatalOnError(err)
 
 		folder, err := internal.ConfigureFolder()
@@ -52,12 +60,12 @@ var backupFetchCmd = &cobra.Command{
 			pgFetcher = postgres.GetPgFetcherOld(args[0], fileMask, restoreSpec)
 		}
 
-		internal.HandleBackupFetch(folder, targetBackupSelector, pgFetcher)
+		internal.HandleBackupFetch(folder, targetBackupSelector, utility.BaseBackupPath, pgFetcher)
 	},
 }
 
-// create the BackupSelector to select the backup to fetch
-func createTargetFetchBackupSelector(cmd *cobra.Command,
+// CreateTargetFetchBackupSelector creates the BackupSelector to select the backup to fetch
+func CreateTargetFetchBackupSelector(cmd *cobra.Command,
 	args []string, targetUserData string) (internal.BackupSelector, error) {
 	targetName := ""
 	if len(args) >= 2 {
@@ -73,13 +81,10 @@ func createTargetFetchBackupSelector(cmd *cobra.Command,
 }
 
 func init() {
-	backupFetchCmd.Flags().StringVar(&fileMask, "mask", "", maskFlagDescription)
-	backupFetchCmd.Flags().StringVar(&restoreSpec, "restore-spec", "", restoreSpecDescription)
-	backupFetchCmd.Flags().BoolVar(&reverseDeltaUnpack, "reverse-unpack",
-		false, reverseDeltaUnpackDescription)
-	backupFetchCmd.Flags().BoolVar(&skipRedundantTars, "skip-redundant-tars",
-		false, skipRedundantTarsDescription)
-	backupFetchCmd.Flags().StringVar(&fetchTargetUserData, "target-user-data",
-		"", targetUserDataDescription)
+	backupFetchCmd.Flags().StringVar(&fileMask, MaskFlag, "", MaskFlagDescription)
+	backupFetchCmd.Flags().StringVar(&restoreSpec, RestoreSpecFlag, "", RestoreSpecDescription)
+	backupFetchCmd.Flags().BoolVar(&reverseDeltaUnpack, ReverseDeltaUnpackFlag, false, ReverseDeltaUnpackDescription)
+	backupFetchCmd.Flags().BoolVar(&skipRedundantTars, SkipRedundantTarsFlag, false, SkipRedundantTarsDescription)
+	backupFetchCmd.Flags().StringVar(&fetchTargetUserData, TargetUserDataFlag, "", TargetUserDataDescription)
 	cmd.AddCommand(backupFetchCmd)
 }

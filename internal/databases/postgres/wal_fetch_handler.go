@@ -31,9 +31,8 @@ func (err InvalidWalFileMagicError) Error() string {
 
 // TODO : unit tests
 // HandleWALFetch is invoked to performa wal-g wal-fetch
-func HandleWALFetch(folder storage.Folder, walFileName string, location string, triggerPrefetch bool) {
-	tracelog.DebugLogger.Printf("HandleWALFetch(folder, %s, %s, %v)\n", walFileName, location, triggerPrefetch)
-	folder = folder.GetSubFolder(utility.WalPath)
+func HandleWALFetch(walFolder storage.Folder, walFileName string, location string, triggerPrefetch bool) {
+	tracelog.DebugLogger.Printf("HandleWALFetch(walFolder, %s, %s, %v)\n", walFileName, location, triggerPrefetch)
 	location = utility.ResolveSymlink(location)
 	if triggerPrefetch {
 		prefetchLocation := location
@@ -95,7 +94,7 @@ func HandleWALFetch(folder storage.Folder, walFileName string, location string, 
 		time.Sleep(2 * time.Millisecond)
 	}
 
-	err := internal.DownloadFileTo(folder, walFileName, location)
+	err := internal.DownloadFileTo(walFolder, walFileName, location)
 	tracelog.ErrorLogger.FatalOnError(err)
 }
 

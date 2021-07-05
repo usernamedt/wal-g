@@ -15,29 +15,38 @@ import (
 )
 
 const (
-	backupPushShortDescription = "Makes backup and uploads it to storage"
+	BackupPushShortDescription = "Makes backup and uploads it to storage"
 
-	permanentFlag             = "permanent"
-	fullBackupFlag            = "full"
-	verifyPagesFlag           = "verify"
-	storeAllCorruptBlocksFlag = "store-all-corrupt"
-	useRatingComposerFlag     = "rating-composer"
-	deltaFromUserDataFlag     = "delta-from-user-data"
-	deltaFromNameFlag         = "delta-from-name"
-	addUserDataFlag           = "add-user-data"
+	PermanentFlag             = "permanent"
+	FullBackupFlag            = "full"
+	VerifyPagesFlag           = "verify"
+	StoreAllCorruptBlocksFlag = "store-all-corrupt"
+	UseRatingComposerFlag     = "rating-composer"
+	DeltaFromUserDataFlag     = "delta-from-user-data"
+	DeltaFromNameFlag         = "delta-from-name"
+	AddUserDataFlag           = "add-user-data"
 
-	permanentShorthand             = "p"
-	fullBackupShorthand            = "f"
-	verifyPagesShorthand           = "v"
-	storeAllCorruptBlocksShorthand = "s"
-	useRatingComposerShorthand     = "r"
+	PermanentShorthand             = "p"
+	FullBackupShorthand            = "f"
+	VerifyPagesShorthand           = "v"
+	StoreAllCorruptBlocksShorthand = "s"
+	UseRatingComposerShorthand     = "r"
+
+	PermanentDesc = "Pushes permanent backup"
+	FullBackupDesc = "Make full backup-push"
+	VerifyPagesDesc = "Verify page checksums"
+	StoreAllCorruptBlocksDesc = "Store all corrupt blocks found during page checksum verification"
+	UseRatingComposerDesc     = "Use rating tar composer (beta)"
+	DeltaFromUserDataDesc    = "Select the backup specified by UserData as the target for the delta backup"
+	DeltaFromNameDesc         = "Select the backup specified by name as the target for the delta backup"
+	AddUserDataDesc           = "Write the provided user data to the backup sentinel and metadata files"
 )
 
 var (
-	// backupPushCmd represents the backupPush command
-	backupPushCmd = &cobra.Command{
+	// BackupPushCmd represents the backupPush command
+	BackupPushCmd = &cobra.Command{
 		Use:   "backup-push db_directory",
-		Short: backupPushShortDescription, // TODO : improve description
+		Short: BackupPushShortDescription, // TODO : improve description
 		Args:  cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			var dataDirectory string
@@ -111,22 +120,22 @@ func createDeltaBaseSelector(cmd *cobra.Command,
 }
 
 func init() {
-	cmd.AddCommand(backupPushCmd)
+	cmd.AddCommand(BackupPushCmd)
 
-	backupPushCmd.Flags().BoolVarP(&permanent, permanentFlag, permanentShorthand,
-		false, "Pushes permanent backup")
-	backupPushCmd.Flags().BoolVarP(&fullBackup, fullBackupFlag, fullBackupShorthand,
-		false, "Make full backup-push")
-	backupPushCmd.Flags().BoolVarP(&verifyPageChecksums, verifyPagesFlag, verifyPagesShorthand,
-		false, "Verify page checksums")
-	backupPushCmd.Flags().BoolVarP(&storeAllCorruptBlocks, storeAllCorruptBlocksFlag, storeAllCorruptBlocksShorthand,
-		false, "Store all corrupt blocks found during page checksum verification")
-	backupPushCmd.Flags().BoolVarP(&useRatingComposer, useRatingComposerFlag, useRatingComposerShorthand,
-		false, "Use rating tar composer (beta)")
-	backupPushCmd.Flags().StringVar(&deltaFromName, deltaFromNameFlag,
-		"", "Select the backup specified by name as the target for the delta backup")
-	backupPushCmd.Flags().StringVar(&deltaFromUserData, deltaFromUserDataFlag,
-		"", "Select the backup specified by UserData as the target for the delta backup")
-	backupPushCmd.Flags().StringVar(&userData, addUserDataFlag,
-		"", "Write the provided user data to the backup sentinel and metadata files.")
+	BackupPushCmd.Flags().BoolVarP(&permanent, PermanentFlag, PermanentShorthand,
+		false, PermanentDesc)
+	BackupPushCmd.Flags().BoolVarP(&fullBackup, FullBackupFlag, FullBackupShorthand,
+		false, FullBackupDesc)
+	BackupPushCmd.Flags().BoolVarP(&verifyPageChecksums, VerifyPagesFlag, VerifyPagesShorthand,
+		false, VerifyPagesDesc)
+	BackupPushCmd.Flags().BoolVarP(&storeAllCorruptBlocks, StoreAllCorruptBlocksFlag, StoreAllCorruptBlocksShorthand,
+		false, StoreAllCorruptBlocksDesc)
+	BackupPushCmd.Flags().BoolVarP(&useRatingComposer, UseRatingComposerFlag, UseRatingComposerShorthand,
+		false, UseRatingComposerDesc)
+	BackupPushCmd.Flags().StringVar(&deltaFromName, DeltaFromNameFlag,
+		"", DeltaFromNameDesc)
+	BackupPushCmd.Flags().StringVar(&deltaFromUserData, DeltaFromUserDataFlag,
+		"", DeltaFromUserDataDesc)
+	BackupPushCmd.Flags().StringVar(&userData, AddUserDataFlag,
+		"", AddUserDataDesc)
 }

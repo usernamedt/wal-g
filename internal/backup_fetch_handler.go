@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/pkg/errors"
 	"github.com/wal-g/storages/storage"
 	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/utility"
-
-	"github.com/pkg/errors"
 )
 
 type BackupNonExistenceError struct {
@@ -73,11 +71,12 @@ func StreamBackupToCommandStdin(cmd *exec.Cmd, backup Backup) error {
 // HandleBackupFetch is invoked to perform wal-g backup-fetch
 func HandleBackupFetch(folder storage.Folder,
 	targetBackupSelector BackupSelector,
+	backupPath string,
 	fetcher func(folder storage.Folder, backup Backup)) {
-	backupName, err := targetBackupSelector.Select(folder.GetSubFolder(utility.BaseBackupPath))
+	backupName, err := targetBackupSelector.Select(folder.GetSubFolder(backupPath))
 	tracelog.ErrorLogger.FatalOnError(err)
 	tracelog.DebugLogger.Printf("HandleBackupFetch(%s, folder,)\n", backupName)
-	backup, err := GetBackupByName(backupName, utility.BaseBackupPath, folder)
+	backup, err := GetBackupByName(backupName, backupPath, folder)
 	tracelog.ErrorLogger.FatalfOnError("Failed to fetch backup: %v\n", err)
 
 	fetcher(folder, backup)

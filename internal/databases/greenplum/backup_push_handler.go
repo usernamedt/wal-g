@@ -25,6 +25,7 @@ type BackupArguments struct {
 	userData       string
 	segmentFwdArgs []SegmentFwdArg
 	segmentCfgPath string
+	fullBackup	   bool
 }
 
 type SegmentUserData struct {
@@ -248,11 +249,12 @@ func NewBackupHandler(arguments BackupArguments) (bh *BackupHandler, err error) 
 }
 
 // NewBackupArguments creates a BackupArgument object to hold the arguments from the cmd
-func NewBackupArguments(isPermanent bool, userData string, fwdArgs []SegmentFwdArg, segmentCfgPath string) BackupArguments {
+func NewBackupArguments(isPermanent bool, userData string, fwdArgs []SegmentFwdArg, segmentCfgPath string, fullBackup bool) BackupArguments {
 	return BackupArguments{
 		isPermanent:    isPermanent,
 		userData:       userData,
 		segmentCfgPath: segmentCfgPath,
 		segmentFwdArgs: fwdArgs,
+		fullBackup: fullBackup,
 	}
 }

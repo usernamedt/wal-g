@@ -6,6 +6,7 @@ import (
 	"github.com/wal-g/wal-g/internal"
 	"github.com/wal-g/wal-g/internal/asm"
 	"github.com/wal-g/wal-g/internal/databases/postgres"
+	"github.com/wal-g/wal-g/utility"
 )
 
 const WalPushShortDescription = "Uploads a WAL file to storage"
@@ -19,24 +20,29 @@ var walPushCmd = &cobra.Command{
 		uploader, err := postgres.ConfigureWalUploader()
 		tracelog.ErrorLogger.FatalOnError(err)
 
-		archiveStatusManager, err := internal.ConfigureArchiveStatusManager()
-		if err == nil {
-			uploader.ArchiveStatusManager = asm.NewDataFolderASM(archiveStatusManager)
-		} else {
-			tracelog.ErrorLogger.PrintError(err)
-			uploader.ArchiveStatusManager = asm.NewNopASM()
-		}
+		ConfigureWalPushASM(uploader)
 
-		PGArchiveStatusManager, err := internal.ConfigurePGArchiveStatusManager()
-		if err == nil {
-			uploader.PGArchiveStatusManager = asm.NewDataFolderASM(PGArchiveStatusManager)
-		} else {
-			tracelog.ErrorLogger.PrintError(err)
-			uploader.PGArchiveStatusManager = asm.NewNopASM()
-		}
-
+		uploader.UploadingFolder = uploader.UploadingFolder.GetSubFolder(utility.WalPath)
 		postgres.HandleWALPush(uploader, args[0])
 	},
+}
+
+func ConfigureWalPushASM(uploader *postgres.WalUploader) {
+	archiveStatusManager, err := internal.ConfigureArchiveStatusManager()
+	if err == nil {
+		uploader.ArchiveStatusManager = asm.NewDataFolderASM(archiveStatusManager)
+	} else {
+		tracelog.ErrorLogger.PrintError(err)
+		uploader.ArchiveStatusManager = asm.NewNopASM()
+	}
+
+	PGArchiveStatusManager, err := internal.ConfigurePGArchiveStatusManager()
+	if err == nil {
+		uploader.PGArchiveStatusManager = asm.NewDataFolderASM(PGArchiveStatusManager)
+	} else {
+		tracelog.ErrorLogger.PrintError(err)
+		uploader.PGArchiveStatusManager = asm.NewNopASM()
+	}
 }
 
 func init() {

@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"github.com/wal-g/tracelog"
-	"github.com/wal-g/wal-g/utility"
 )
 
 type CantOverwriteWalFileError struct {
@@ -32,7 +31,6 @@ func (err CantOverwriteWalFileError) Error() string {
 // TODO : unit tests
 // HandleWALPush is invoked to perform wal-g wal-push
 func HandleWALPush(uploader *WalUploader, walFilePath string) {
-	uploader.UploadingFolder = uploader.UploadingFolder.GetSubFolder(utility.WalPath)
 	if uploader.ArchiveStatusManager.IsWalAlreadyUploaded(walFilePath) {
 		err := uploader.ArchiveStatusManager.UnmarkWalFile(walFilePath)
 
