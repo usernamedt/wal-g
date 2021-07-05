@@ -27,7 +27,6 @@ const (
 	verifyPagesShorthand           = "v"
 	storeAllCorruptBlocksShorthand = "s"
 	useRatingComposerShorthand     = "r"
-	segmentCfgPathShorthand        = "c"
 )
 
 var (
@@ -88,7 +87,7 @@ func init() {
 		false, "Use rating tar composer (beta)")
 	backupPushCmd.Flags().StringVar(&userData, addUserDataFlag,
 		"", "Write the provided user data to the backup sentinel and metadata files.")
-	backupPushCmd.Flags().StringVarP(&segmentCfgPath, segmentCfgPathFlag, segmentCfgPathShorthand,
+	backupPushCmd.Flags().StringVar(&segmentCfgPath, segmentCfgPathFlag,
 		"", "Path to the segment WAL-G configuration file (must be the same on all segments).")
 	_ = backupPushCmd.MarkFlagRequired(segmentCfgPathFlag)
 }
