@@ -6,17 +6,15 @@ require (
 	github.com/DATA-DOG/godog v0.7.14-0.20190529133509-96731eaefa46
 	github.com/DataDog/zstd v1.4.4
 	github.com/Microsoft/go-winio v0.4.14 // indirect
-	github.com/RoaringBitmap/roaring v0.4.21
+	github.com/RoaringBitmap/roaring v0.9.0
 	github.com/aws/aws-sdk-go v1.34.28
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cyberdelia/lzo v0.0.0-20171006181345-d85071271a6f
-	github.com/denisenkom/go-mssqldb v0.9.0 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.13.1
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/glycerine/go-unsnap-stream v0.0.0-20190901134440-81cf024a9e0a // indirect
 	github.com/go-openapi/errors v0.19.3 // indirect
 	github.com/go-openapi/strfmt v0.19.4 // indirect
 	github.com/go-redis/redis v6.15.6+incompatible
@@ -27,17 +25,15 @@ require (
 	github.com/golang/snappy v0.0.2-0.20190904063534-ff6b7dc882cf // indirect
 	github.com/google/brotli v1.0.7
 	github.com/google/uuid v1.1.1
+	github.com/gopherjs/gopherjs v0.0.0-20190910122728-9d188e94fb99 // indirect
 	github.com/greenplum-db/gp-common-go-libs v1.0.4
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.6.5-0.20200823013804-5db484908cf7
 	github.com/jackc/pglogrepl v0.0.0-20210109153808-a78a685a0bff
 	github.com/jackc/pgproto3/v2 v2.0.7
 	github.com/jackc/pgx v3.6.0+incompatible
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/jessevdk/go-flags v1.4.0 // indirect
-	github.com/kisielk/errcheck v1.2.0 // indirect
-	github.com/lib/pq v1.3.0 // indirect
 	github.com/magiconair/properties v1.8.1
 	github.com/mattn/go-runewidth v0.0.8 // indirect
 	github.com/minio/sio v0.2.0
@@ -56,8 +52,6 @@ require (
 	github.com/ulikunitz/xz v0.5.6
 	github.com/wal-g/storages v0.0.0-20210218090605-534397353a97
 	github.com/wal-g/tracelog v0.0.0-20190824100002-0ab2b054ff30
-	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
-	github.com/xdg/stringprep v1.0.1-0.20180714160509-73f8eece6fdc // indirect
 	github.com/yandex-cloud/go-genproto v0.0.0-20201102102956-0c505728b6f0
 	github.com/yandex-cloud/go-sdk v0.0.0-20201109103511-a86298d3fea5
 	go.mongodb.org/mongo-driver v1.5.1
